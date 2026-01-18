@@ -10,10 +10,10 @@ matplotlib.rcParams['font.sans-serif'] = ['Arial Unicode MS', 'SimHei', 'STHeiti
 matplotlib.rcParams['axes.unicode_minus'] = False
 
 
-def analyze_dlt(file_path):
+def analyze_dlt(file_path, sheet_name='大乐透'):
     """分析大乐透数据"""
-    print(f"正在读取大乐透数据: {file_path}")
-    df = pd.read_excel(file_path, engine='openpyxl')
+    print(f"正在读取大乐透数据: {file_path} (Sheet: {sheet_name})")
+    df = pd.read_excel(file_path, sheet_name=sheet_name, engine='openpyxl')
     
     # 统计前区5个号码各数字出现次数
     front_area_numbers = []
@@ -107,12 +107,6 @@ def analyze_dlt(file_path):
     total_row_df = pd.DataFrame([total_row_dict])
     df = pd.concat([df, total_row_df], ignore_index=True)
     
-    # 保存到新的Excel文件（不覆盖原文件）
-    base_name = os.path.splitext(file_path)[0]
-    output_file = f"{base_name}_分析.xlsx"
-    df.to_excel(output_file, index=False, engine='openpyxl')
-    print(f"平均值数据已保存到新文件: {output_file}")
-    
     # 绘制统计图
     fig, axes = plt.subplots(2, 1, figsize=(14, 10))
     
@@ -158,12 +152,15 @@ def analyze_dlt(file_path):
     plt.savefig('/Users/chenzhangjie/Downloads/大乐透统计图.png', dpi=300, bbox_inches='tight')
     print("统计图已保存到 大乐透统计图.png")
     plt.close()
+    
+    # 返回处理后的DataFrame，不再单独保存文件
+    return df
 
 
-def analyze_ssq(file_path):
+def analyze_ssq(file_path, sheet_name='双色球'):
     """分析双色球数据"""
-    print(f"正在读取双色球数据: {file_path}")
-    df = pd.read_excel(file_path, engine='openpyxl')
+    print(f"正在读取双色球数据: {file_path} (Sheet: {sheet_name})")
+    df = pd.read_excel(file_path, sheet_name=sheet_name, engine='openpyxl')
     
     # 统计红球6个号码各数字出现次数
     red_ball_numbers = []
@@ -254,12 +251,6 @@ def analyze_ssq(file_path):
     total_row_df = pd.DataFrame([total_row_dict])
     df = pd.concat([df, total_row_df], ignore_index=True)
     
-    # 保存到新的Excel文件（不覆盖原文件）
-    base_name = os.path.splitext(file_path)[0]
-    output_file = f"{base_name}_分析.xlsx"
-    df.to_excel(output_file, index=False, engine='openpyxl')
-    print(f"平均值数据已保存到新文件: {output_file}")
-    
     # 绘制统计图
     fig, axes = plt.subplots(2, 1, figsize=(14, 10))
     
@@ -305,35 +296,45 @@ def analyze_ssq(file_path):
     plt.savefig('/Users/chenzhangjie/Downloads/双色球统计图.png', dpi=300, bbox_inches='tight')
     print("统计图已保存到 双色球统计图.png")
     plt.close()
+    
+    # 返回处理后的DataFrame，不再单独保存文件
+    return df
 
 
 if __name__ == "__main__":
-    # 分析大乐透
-    dlt_file = "/Users/chenzhangjie/Downloads/大乐透.xlsx"
-    print("=" * 60)
-    print("开始分析大乐透数据")
-    print("=" * 60)
-    try:
-        analyze_dlt(dlt_file)
-        print("大乐透分析完成！\n")
-    except Exception as e:
-        print(f"大乐透分析出错: {e}")
-        import traceback
-        traceback.print_exc()
+    # 统一的Excel文件路径
+    input_file = "/Users/chenzhangjie/Downloads/彩票数据（双色球、大乐透）.xlsx"
+    output_file = "/Users/chenzhangjie/Downloads/彩票数据（双色球、大乐透）_分析.xlsx"
     
-    # 分析双色球
-    ssq_file = "/Users/chenzhangjie/Downloads/双色球.xlsx"
-    print("=" * 60)
-    print("开始分析双色球数据")
-    print("=" * 60)
-    try:
-        analyze_ssq(ssq_file)
-        print("双色球分析完成！\n")
-    except Exception as e:
-        print(f"双色球分析出错: {e}")
-        import traceback
-        traceback.print_exc()
+    # 使用ExcelWriter来写入多个sheet到同一个文件
+    with pd.ExcelWriter(output_file, engine='openpyxl') as writer:
+        # 分析大乐透
+        print("=" * 60)
+        print("开始分析大乐透数据")
+        print("=" * 60)
+        try:
+            dlt_df = analyze_dlt(input_file, sheet_name='大乐透')
+            dlt_df.to_excel(writer, sheet_name='大乐透', index=False)
+            print("大乐透分析完成！\n")
+        except Exception as e:
+            print(f"大乐透分析出错: {e}")
+            import traceback
+            traceback.print_exc()
+        
+        # 分析双色球
+        print("=" * 60)
+        print("开始分析双色球数据")
+        print("=" * 60)
+        try:
+            ssq_df = analyze_ssq(input_file, sheet_name='双色球')
+            ssq_df.to_excel(writer, sheet_name='双色球', index=False)
+            print("双色球分析完成！\n")
+        except Exception as e:
+            print(f"双色球分析出错: {e}")
+            import traceback
+            traceback.print_exc()
     
+    print(f"所有分析数据已保存到: {output_file}")
     print("=" * 60)
     print("所有分析完成！")
     print("=" * 60)

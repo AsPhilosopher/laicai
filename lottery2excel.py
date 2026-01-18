@@ -280,10 +280,55 @@ def export_dlt_to_excel():
     print(f"大乐透数据已保存到 大乐透.xlsx，共 {len(df)} 条记录")
 
 
-if __name__ == "__main__":
-    # 导出双色球数据
-    export_ssq_to_excel()
+def export_all_to_excel():
+    """将双色球和大乐透数据导出到同一个Excel文件的不同sheet中"""
+    excel_path = "/Users/chenzhangjie/Downloads/彩票数据（双色球、大乐透）.xlsx"
+    
+    # 获取并处理双色球数据
+    print("正在获取双色球数据...")
+    ssq_data = get_ssq_data()
+    if not ssq_data:
+        print("未获取到双色球数据")
+        ssq_df = None
+    else:
+        print(f"获取到 {len(ssq_data)} 条双色球数据")
+        print("正在处理双色球数据...")
+        ssq_df = process_ssq_data(ssq_data)
+        print(f"双色球数据处理完成，共 {len(ssq_df)} 条记录")
+    
     print("\n" + "="*50 + "\n")
-    # 导出大乐透数据
-    export_dlt_to_excel()
+    
+    # 获取并处理大乐透数据
+    print("正在获取大乐透数据...")
+    dlt_data = get_dlt_data()
+    if not dlt_data:
+        print("未获取到大乐透数据")
+        dlt_df = None
+    else:
+        print(f"获取到 {len(dlt_data)} 条大乐透数据")
+        print("正在处理大乐透数据...")
+        dlt_df = process_dlt_data(dlt_data)
+        print(f"大乐透数据处理完成，共 {len(dlt_df)} 条记录")
+    
+    # 使用ExcelWriter写入多个sheet
+    print("\n正在保存到Excel...")
+    with pd.ExcelWriter(excel_path, engine='openpyxl') as writer:
+        if ssq_df is not None:
+            ssq_df.to_excel(writer, sheet_name='双色球', index=False)
+            print(f"双色球数据已写入sheet: 双色球")
+        
+        if dlt_df is not None:
+            dlt_df.to_excel(writer, sheet_name='大乐透', index=False)
+            print(f"大乐透数据已写入sheet: 大乐透")
+    
+    print(f"\n所有数据已保存到 {excel_path}")
+    if ssq_df is not None:
+        print(f"  - 双色球: {len(ssq_df)} 条记录")
+    if dlt_df is not None:
+        print(f"  - 大乐透: {len(dlt_df)} 条记录")
+
+
+if __name__ == "__main__":
+    # 导出所有数据到同一个Excel文件的不同sheet
+    export_all_to_excel()
     print("\n所有数据导出完成！")
