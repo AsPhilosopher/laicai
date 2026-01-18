@@ -116,15 +116,17 @@ def analyze_dlt(file_path):
     # 绘制统计图
     fig, axes = plt.subplots(2, 1, figsize=(14, 10))
     
-    # 前区统计图
-    front_nums = sorted(front_counter.keys())
-    front_counts = [front_counter[n] for n in front_nums]
-    bars1 = axes[0].bar(front_nums, front_counts, color='steelblue', alpha=0.7)
+    # 前区统计图 - 按出现次数升序排序
+    front_sorted = sorted(front_counter.items(), key=lambda x: x[1])  # 按出现次数升序
+    front_nums = [item[0] for item in front_sorted]
+    front_counts = [item[1] for item in front_sorted]
+    x_positions = range(len(front_nums))  # x轴位置索引
+    bars1 = axes[0].bar(x_positions, front_counts, color='steelblue', alpha=0.7)
     axes[0].set_title('大乐透前区5个号码各数字出现次数统计', fontsize=14, fontweight='bold')
     axes[0].set_xlabel('号码', fontsize=12)
     axes[0].set_ylabel('出现次数', fontsize=12)
-    axes[0].set_xticks(front_nums)  # 确保所有x轴标签都显示
-    axes[0].set_xticklabels(front_nums, rotation=0)
+    axes[0].set_xticks(x_positions)  # 确保所有x轴标签都显示
+    axes[0].set_xticklabels(front_nums, rotation=0)  # 标签显示实际数字
     axes[0].grid(axis='y', alpha=0.3)
     # 在柱状图顶部显示数值
     for bar in bars1:
@@ -133,15 +135,17 @@ def analyze_dlt(file_path):
                     f'{int(height)}',
                     ha='center', va='bottom', fontsize=9)
     
-    # 后区统计图
-    back_nums = sorted(back_counter.keys())
-    back_counts = [back_counter[n] for n in back_nums]
-    bars2 = axes[1].bar(back_nums, back_counts, color='coral', alpha=0.7)
+    # 后区统计图 - 按出现次数升序排序
+    back_sorted = sorted(back_counter.items(), key=lambda x: x[1])  # 按出现次数升序
+    back_nums = [item[0] for item in back_sorted]
+    back_counts = [item[1] for item in back_sorted]
+    x_positions = range(len(back_nums))  # x轴位置索引
+    bars2 = axes[1].bar(x_positions, back_counts, color='coral', alpha=0.7)
     axes[1].set_title('大乐透后区2个号码各数字出现次数统计', fontsize=14, fontweight='bold')
     axes[1].set_xlabel('号码', fontsize=12)
     axes[1].set_ylabel('出现次数', fontsize=12)
-    axes[1].set_xticks(back_nums)  # 确保所有x轴标签都显示
-    axes[1].set_xticklabels(back_nums, rotation=0)
+    axes[1].set_xticks(x_positions)  # 确保所有x轴标签都显示
+    axes[1].set_xticklabels(back_nums, rotation=0)  # 标签显示实际数字
     axes[1].grid(axis='y', alpha=0.3)
     # 在柱状图顶部显示数值
     for bar in bars2:
@@ -259,15 +263,17 @@ def analyze_ssq(file_path):
     # 绘制统计图
     fig, axes = plt.subplots(2, 1, figsize=(14, 10))
     
-    # 红球统计图
-    red_nums = sorted(red_counter.keys())
-    red_counts = [red_counter[n] for n in red_nums]
-    bars1 = axes[0].bar(red_nums, red_counts, color='red', alpha=0.7)
+    # 红球统计图 - 按出现次数升序排序
+    red_sorted = sorted(red_counter.items(), key=lambda x: x[1])  # 按出现次数升序
+    red_nums = [item[0] for item in red_sorted]
+    red_counts = [item[1] for item in red_sorted]
+    x_positions = range(len(red_nums))  # x轴位置索引
+    bars1 = axes[0].bar(x_positions, red_counts, color='red', alpha=0.7)
     axes[0].set_title('双色球红球6个号码各数字出现次数统计', fontsize=14, fontweight='bold')
     axes[0].set_xlabel('号码', fontsize=12)
     axes[0].set_ylabel('出现次数', fontsize=12)
-    axes[0].set_xticks(red_nums)  # 确保所有x轴标签都显示
-    axes[0].set_xticklabels(red_nums, rotation=0)
+    axes[0].set_xticks(x_positions)  # 确保所有x轴标签都显示
+    axes[0].set_xticklabels(red_nums, rotation=0)  # 标签显示实际数字
     axes[0].grid(axis='y', alpha=0.3)
     # 在柱状图顶部显示数值
     for bar in bars1:
@@ -276,15 +282,17 @@ def analyze_ssq(file_path):
                     f'{int(height)}',
                     ha='center', va='bottom', fontsize=9)
     
-    # 蓝球统计图
-    blue_nums = sorted(blue_counter.keys())
-    blue_counts = [blue_counter[n] for n in blue_nums]
-    bars2 = axes[1].bar(blue_nums, blue_counts, color='blue', alpha=0.7)
+    # 蓝球统计图 - 按出现次数升序排序
+    blue_sorted = sorted(blue_counter.items(), key=lambda x: x[1])  # 按出现次数升序
+    blue_nums = [item[0] for item in blue_sorted]
+    blue_counts = [item[1] for item in blue_sorted]
+    x_positions = range(len(blue_nums))  # x轴位置索引
+    bars2 = axes[1].bar(x_positions, blue_counts, color='blue', alpha=0.7)
     axes[1].set_title('双色球蓝球1个号码各数字出现次数统计', fontsize=14, fontweight='bold')
     axes[1].set_xlabel('号码', fontsize=12)
     axes[1].set_ylabel('出现次数', fontsize=12)
-    axes[1].set_xticks(blue_nums)  # 确保所有x轴标签都显示
-    axes[1].set_xticklabels(blue_nums, rotation=0)
+    axes[1].set_xticks(x_positions)  # 确保所有x轴标签都显示
+    axes[1].set_xticklabels(blue_nums, rotation=0)  # 标签显示实际数字
     axes[1].grid(axis='y', alpha=0.3)
     # 在柱状图顶部显示数值
     for bar in bars2:
