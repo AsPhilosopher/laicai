@@ -141,6 +141,37 @@ def get_all_fund_data(fund_code: str, start_date: str, end_date: str) -> List[Di
     return all_data
 
 
+def convert_percentage(value: Any) -> float:
+    """
+    将百分比值转换为小数形式（用于Excel百分数格式）
+    
+    Args:
+        value: 百分比值（可能是字符串、数字或None）
+    
+    Returns:
+        转换为小数后的值（如5.5% -> 0.055），如果无法转换则返回None
+    """
+    if value is None or value == "":
+        return None
+    
+    try:
+        # 如果是字符串，去掉百分号
+        if isinstance(value, str):
+            value = value.replace("%", "").strip()
+            if not value:
+                return None
+        
+        # 转换为浮点数
+        num_value = float(value)
+        
+        # 如果数值较大（如大于1），可能是百分比形式（如5.5表示5.5%），需要除以100
+        # 如果数值较小（如小于等于1），可能已经是小数形式（如0.055表示5.5%）
+        # 这里假设API返回的是百分比形式（如5.5表示5.5%），所以除以100
+        return num_value / 100.0
+    except (ValueError, TypeError):
+        return None
+
+
 def process_fund_data(data: List[Dict[str, Any]]) -> pd.DataFrame:
     """
     处理基金数据并转换为DataFrame
@@ -157,11 +188,11 @@ def process_fund_data(data: List[Dict[str, Any]]) -> pd.DataFrame:
         row = {
             "日期": item.get("date", ""),
             "单位净值(元)": item.get("netValuePer", ""),
-            "日涨跌(%)": item.get("rate", ""),
-            "最近7天收益率(%)": item.get("weekYield", ""),
-            "最近30日收益率(%)": item.get("monthYield", ""),
-            "今年以来收益率(%)": item.get("thisYearYield", ""),
-            "成立以来收益率(%)": item.get("totalYield", ""),
+            "日涨跌(%)": convert_percentage(item.get("rate", "")),
+            "最近7天收益率(%)": convert_percentage(item.get("weekYield", "")),
+            "最近30日收益率(%)": convert_percentage(item.get("monthYield", "")),
+            "今年以来收益率(%)": convert_percentage(item.get("thisYearYield", "")),
+            "成立以来收益率(%)": convert_percentage(item.get("totalYield", "")),
             "累计净值(元)": item.get("totalNetValue", "")
         }
         rows.append(row)
@@ -227,7 +258,33 @@ def export_fund_to_excel(fund_code: str = "159937", years: int = 10, output_file
     
     # 保存到Excel
     try:
-        df.to_excel(output_file, index=False, engine='openpyxl')
+        with pd.ExcelWriter(output_file, engine='openpyxl') as writer:
+            df.to_excel(writer, index=False, sheet_name='Sheet1')
+            
+            # 获取工作表对象
+            worksheet = writer.sheets['Sheet1']
+            
+            # 定义百分比列
+            percentage_columns = [
+                "日涨跌(%)",
+                "最近7天收益率(%)",
+                "最近30日收益率(%)",
+                "今年以来收益率(%)",
+                "成立以来收益率(%)"
+            ]
+            
+            # 获取列索引
+            column_indices = {col: df.columns.get_loc(col) for col in percentage_columns if col in df.columns}
+            
+            # 应用百分数格式
+            for col_name, col_idx in column_indices.items():
+                # 列索引从0开始，但Excel列索引从1开始，所以需要+1
+                # 行索引从2开始（第1行是标题，第2行开始是数据）
+                for row_idx in range(2, len(df) + 2):
+                    cell = worksheet.cell(row=row_idx, column=col_idx + 1)
+                    # 设置百分数格式（保留2位小数）
+                    cell.number_format = '0.00%'
+        
         print(f"\n✓ 数据已成功保存到: {output_file}")
         print(f"共 {len(df)} 条记录")
         if not df.empty:
