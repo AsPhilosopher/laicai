@@ -122,10 +122,9 @@ def plot_gold_close_price(excel_file: str,
     }
 
     html_content = fig.to_html(include_plotlyjs="cdn", config=config, full_html=True)
-
-    # 注入中文语言包
+    # 注入 Plotly 官方中文 locale，并强制全局使用中文，同时修正"下载图片"按钮的英文 tooltip
     zh_locale_inject = (
-        "\n<!-- Plotly 中文语言包 -->\n"
+        "\n<!-- Plotly 中文语言包（用于工具栏提示/按钮文案等） -->\n"
         "<script src=\"https://cdn.plot.ly/plotly-locale-zh-cn-latest.js\"></script>\n"
         "<script>\n"
         "  (function(){\n"
@@ -135,6 +134,7 @@ def plot_gold_close_price(excel_file: str,
         "  })();\n"
         "</script>\n"
         "<script>\n"
+        "  // 强制把“下载图片”按钮 tooltip 改为中文（该按钮在部分版本/环境下不会随 locale 翻译）\n"
         "  (function(){\n"
         "    function patchDownloadTooltip(){\n"
         "      try {\n"
@@ -149,6 +149,7 @@ def plot_gold_close_price(excel_file: str,
         "      } catch (e) { return false; }\n"
         "    }\n"
         "\n"
+        "    // 等待 modebar 渲染出来再替换（最多重试 60 次，大约 3 秒）\n"
         "    var tries = 0;\n"
         "    var timer = setInterval(function(){\n"
         "      tries += 1;\n"
@@ -172,7 +173,7 @@ def plot_gold_close_price(excel_file: str,
 if __name__ == "__main__":
     excel_file = "/Users/chenzhangjie/Downloads/黄金（Au99.99）.xlsx"
     sheet_name = 0  # 若有多个 sheet，请调整
-    years = 10
+    years = 3
 
     try:
         output_file = plot_gold_close_price(excel_file, sheet_name, years)
