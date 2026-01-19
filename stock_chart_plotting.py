@@ -4,15 +4,20 @@ from datetime import datetime, timedelta
 import os
 
 
-def plot_stock_chart(excel_file: str, sheet_name: str = "上证综合指数", years: int = 3, 
+def plot_stock_chart(excel_file: str,
+                     sheet_name: str = "上证综合指数",
+                     years: int = 3,
+                     metrics=None,
                      output_html: str = None):
     """
-    绘制股票收盘价折线图，支持交互式缩放和鼠标悬停显示坐标，输出为HTML5格式
+    绘制股票价格折线图（开盘/收盘/最高/最低可选），支持交互式缩放和鼠标悬停显示坐标，输出为HTML5格式
     
     Args:
         excel_file: Excel文件路径
         sheet_name: Sheet名称
         years: 显示近N年的数据
+        metrics: 要绘制的列名列表（可包含 '开盘Open'/'收盘Close'/'最高High'/'最低Low'），
+                 传哪些就画哪些，默认全部四条
         output_html: 输出的HTML文件路径，如果为None则使用默认路径
     """
     # 读取Excel数据
@@ -20,9 +25,29 @@ def plot_stock_chart(excel_file: str, sheet_name: str = "上证综合指数", ye
     print(f"Sheet名称: {sheet_name}")
     df = pd.read_excel(excel_file, sheet_name=sheet_name, engine='openpyxl')
     
-    # 检查必要的列是否存在
-    if '日期Date' not in df.columns or '收盘Close' not in df.columns:
-        raise ValueError(f"Excel文件中缺少必要的列。现有列: {df.columns.tolist()}")
+    # 配置可选曲线及默认值
+    series_config = {
+        '开盘Open': {'name': '开盘价', 'color': '#1f77b4'},   # 蓝
+        '收盘Close': {'name': '收盘价', 'color': '#FFD700'}, # 黄（金色）
+        '最高High': {'name': '最高价', 'color': '#d62728'},  # 红
+        '最低Low': {'name': '最低价', 'color': '#2ca02c'},   # 绿
+    }
+    # 用户传入哪些列，就画哪些；默认全部
+    metrics_to_plot = metrics or list(series_config.keys())
+
+    # 校验列存在
+    missing_metrics = [m for m in metrics_to_plot if m not in series_config]
+    if missing_metrics:
+        raise ValueError(f"metrics 包含不支持的列: {missing_metrics}，"
+                         f"可选: {list(series_config.keys())}")
+
+    required_cols = ['日期Date'] + metrics_to_plot
+    missing_cols = [col for col in required_cols if col not in df.columns]
+    if missing_cols:
+        raise ValueError(
+            f"Excel文件中缺少必要的列: {missing_cols}。"
+            f"现有列: {df.columns.tolist()}"
+        )
     
     # 转换日期格式（从YYYYMMDD整数转换为datetime）
     df['日期'] = pd.to_datetime(df['日期Date'].astype(str), format='%Y%m%d')
@@ -46,22 +71,24 @@ def plot_stock_chart(excel_file: str, sheet_name: str = "上证综合指数", ye
     # 创建plotly图表
     fig = go.Figure()
     
-    # 添加折线图
-    fig.add_trace(go.Scatter(
-        x=df_filtered['日期'],
-        y=df_filtered['收盘Close'],
-        mode='lines',
-        name='收盘价',
-        line=dict(color='#1f77b4', width=2),
-        hovertemplate='<b>日期</b>: %{x|%Y-%m-%d}<br>' +
-                      '<b>收盘价</b>: %{y:.2f}<br>' +
-                      '<extra></extra>',
-    ))
+    # 添加折线图：按 metrics_to_plot 动态绘制
+    for col in metrics_to_plot:
+        cfg = series_config[col]
+        fig.add_trace(go.Scatter(
+            x=df_filtered['日期'],
+            y=df_filtered[col],
+            mode='lines',
+            name=cfg['name'],
+            line=dict(color=cfg['color'], width=2),
+            hovertemplate='<b>日期</b>: %{x|%Y-%m-%d}<br>' +
+                          f"<b>{cfg['name']}</b>: "+"%{y:.2f}<br>" +
+                          '<extra></extra>',
+        ))
     
     # 设置图表布局
     fig.update_layout(
         title={
-            'text': f'{sheet_name} - 近{years}年收盘价走势图',
+            'text': f'{sheet_name} - 近{years}年价格走势图',
             'x': 0.5,
             'xanchor': 'center',
             'font': {'size': 20, 'family': 'Arial, sans-serif'}
@@ -87,7 +114,7 @@ def plot_stock_chart(excel_file: str, sheet_name: str = "上证综合指数", ye
             type="date"
         ),
         yaxis=dict(
-            title=dict(text='收盘价', font=dict(size=14)),
+        title=dict(text='价格', font=dict(size=14)),
             showgrid=True,
             gridcolor='rgba(128, 128, 128, 0.2)'
         ),
@@ -110,7 +137,7 @@ def plot_stock_chart(excel_file: str, sheet_name: str = "上证综合指数", ye
         excel_dir = os.path.dirname(excel_file)
         if not excel_dir:
             excel_dir = os.getcwd()
-        output_html = os.path.join(excel_dir, f"{sheet_name}_近{years}年收盘价走势图.html")
+        output_html = os.path.join(excel_dir, f"{sheet_name}_近{years}年价格走势图.html")
     
     # 保存为HTML文件
     print(f"\n正在生成HTML文件: {output_html}")
@@ -125,7 +152,7 @@ def plot_stock_chart(excel_file: str, sheet_name: str = "上证综合指数", ye
         'modeBarButtonsToRemove': [],
         'toImageButtonOptions': {
             'format': 'png',
-            'filename': f'{sheet_name}_近{years}年收盘价走势图',
+            'filename': f'{sheet_name}_近{years}年价格走势图',
             'height': 700,
             'width': 1400,
             'scale': 1
@@ -206,9 +233,13 @@ if __name__ == "__main__":
     excel_file = "/Users/chenzhangjie/Downloads/股票指数数据.xlsx"
     sheet_name = "上证综合指数"
     years = 10
+    # metrics=None
+    metrics=['收盘Close']
+    # metrics=['开盘Open', '收盘Close']
+    # metrics=['开盘Open', '收盘Close', '最高High', '最低Low']
     
     try:
-        output_file = plot_stock_chart(excel_file, sheet_name, years)
+        output_file = plot_stock_chart(excel_file, sheet_name, years , metrics)
         print(f"\n完成！HTML文件已保存到: {output_file}")
     except Exception as e:
         print(f"错误: {e}")
