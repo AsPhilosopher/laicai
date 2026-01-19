@@ -173,19 +173,8 @@ def plot_stock_chart(excel_file: str, sheet_name: str = "上证综合指数", ye
     if "</head>" in html_content:
         html_content = html_content.replace("</head>", zh_locale_inject + "</head>")
     
-    # 替换月份英文为中文
-    month_map = {
-        'Jan': '1月', 'Feb': '2月', 'Mar': '3月', 'Apr': '4月',
-        'May': '5月', 'Jun': '6月', 'Jul': '7月', 'Aug': '8月',
-        'Sep': '9月', 'Oct': '10月', 'Nov': '11月', 'Dec': '12月',
-        'January': '1月', 'February': '2月', 'March': '3月', 'April': '4月',
-        'June': '6月', 'July': '7月', 'August': '8月', 'September': '9月',
-        'October': '10月', 'November': '11月', 'December': '12月'
-    }
-    
-    for en_month, cn_month in month_map.items():
-        html_content = html_content.replace(en_month, cn_month)
-    
+    # 依赖 Plotly zh-cn locale 来处理月份/tooltip 文案，避免对 HTML 进行字符串替换，
+    # 防止破坏 Plotly 内嵌的二进制数据（大数据量时替换可能导致 TypedArray 长度异常）
     # 工具栏 tooltip 文案由 Plotly 的 zh-cn locale 控制；不再用字符串替换的方式“硬改”，避免漏改/误改
     
     # 写入文件
@@ -212,7 +201,7 @@ def plot_stock_chart(excel_file: str, sheet_name: str = "上证综合指数", ye
 if __name__ == "__main__":
     excel_file = "/Users/chenzhangjie/Downloads/股票指数数据.xlsx"
     sheet_name = "上证综合指数"
-    years = 3
+    years = 10
     
     try:
         output_file = plot_stock_chart(excel_file, sheet_name, years)
