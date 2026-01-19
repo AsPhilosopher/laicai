@@ -34,6 +34,8 @@ def plot_stock_chart(excel_file: str, sheet_name: str = "上证综合指数", ye
     
     if df_filtered.empty:
         raise ValueError(f"筛选后没有数据。请检查日期范围。")
+    # 计算当前可用数据跨度（年），用于动态增加时间范围按钮
+    available_years = (df_filtered['日期'].max() - df_filtered['日期'].min()).days / 365.25
     
     # 按日期排序
     df_filtered = df_filtered.sort_values('日期')
@@ -71,13 +73,15 @@ def plot_stock_chart(excel_file: str, sheet_name: str = "上证综合指数", ye
             tickformat='%Y-%m-%d',
             dtick="M1",  # 每月显示一个刻度
             rangeselector=dict(
-                buttons=list([
-                    dict(count=1, label="1个月", step="month", stepmode="backward"),
-                    dict(count=3, label="3个月", step="month", stepmode="backward"),
-                    dict(count=6, label="6个月", step="month", stepmode="backward"),
-                    dict(count=1, label="1年", step="year", stepmode="backward"),
-                    dict(step="all", label="全部")
-                ])
+                buttons=(lambda span_years: (
+                    [dict(count=1, label="1个月", step="month", stepmode="backward"),
+                     dict(count=3, label="3个月", step="month", stepmode="backward"),
+                     dict(count=6, label="6个月", step="month", stepmode="backward"),
+                     dict(count=1, label="1年", step="year", stepmode="backward")] +
+                    ([dict(count=3, label="3年", step="year", stepmode="backward")] if span_years > 3 else []) +
+                    ([dict(count=5, label="5年", step="year", stepmode="backward")] if span_years > 5 else []) +
+                    [dict(step="all", label="全部")]
+                ))(available_years)
             ),
             rangeslider=dict(visible=True, thickness=0.05),
             type="date"
