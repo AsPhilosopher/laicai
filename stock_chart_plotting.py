@@ -111,9 +111,10 @@ def plot_stock_chart(excel_file: str, sheet_name: str = "上证综合指数", ye
     # 保存为HTML文件
     print(f"\n正在生成HTML文件: {output_html}")
     
-    # 配置中文语言环境和工具栏
+    # 配置工具栏（Plotly 的工具栏 tooltip 语言由 locale 决定）
+    # 注意：Plotly 常用 locale key 是 'zh-cn'（小写、连字符），且需要额外加载 locale 脚本才会生效
     config = {
-        'locale': 'zh-CN',
+        'locale': 'zh-cn',
         'displayModeBar': True,
         'displaylogo': False,
         'modeBarButtonsToAdd': [],
@@ -127,8 +128,50 @@ def plot_stock_chart(excel_file: str, sheet_name: str = "上证综合指数", ye
         }
     }
     
-    # 添加自定义JavaScript来格式化日期为中文
-    html_content = fig.to_html(include_plotlyjs='cdn', config=config)
+    # 生成 HTML（先输出完整 HTML，便于注入中文 locale 脚本）
+    html_content = fig.to_html(include_plotlyjs='cdn', config=config, full_html=True)
+
+    # 注入 Plotly 官方中文 locale，并强制全局使用中文
+    # 说明：仅设置 config['locale'] 不够；plotly.js CDN 默认不一定内置 zh-cn，需要单独加载 locale 文件
+    zh_locale_inject = (
+        "\n<!-- Plotly 中文语言包（用于工具栏提示/按钮文案等） -->\n"
+        "<script src=\"https://cdn.plot.ly/plotly-locale-zh-cn-latest.js\"></script>\n"
+        "<script>\n"
+        "  (function(){\n"
+        "    if (window.Plotly && Plotly.setPlotConfig) {\n"
+        "      Plotly.setPlotConfig({locale: 'zh-cn'});\n"
+        "    }\n"
+        "  })();\n"
+        "</script>\n"
+        "<script>\n"
+        "  // 强制把“下载图片”按钮 tooltip 改为中文（该按钮在部分版本/环境下不会随 locale 翻译）\n"
+        "  (function(){\n"
+        "    function patchDownloadTooltip(){\n"
+        "      try {\n"
+        "        var btn = document.querySelector('.modebar-btn[data-title=\"Download plot as a png\"]')\n"
+        "          || document.querySelector('.modebar-btn[data-title=\"Download plot as a PNG\"]');\n"
+        "        if (!btn) return false;\n"
+        "        var cn = '下载为PNG图片';\n"
+        "        btn.setAttribute('data-title', cn);\n"
+        "        btn.setAttribute('title', cn);\n"
+        "        btn.setAttribute('aria-label', cn);\n"
+        "        return true;\n"
+        "      } catch (e) { return false; }\n"
+        "    }\n"
+        "\n"
+        "    // 等待 modebar 渲染出来再替换（最多重试 60 次，大约 3 秒）\n"
+        "    var tries = 0;\n"
+        "    var timer = setInterval(function(){\n"
+        "      tries += 1;\n"
+        "      if (patchDownloadTooltip() || tries >= 60) {\n"
+        "        clearInterval(timer);\n"
+        "      }\n"
+        "    }, 50);\n"
+        "  })();\n"
+        "</script>\n"
+    )
+    if "</head>" in html_content:
+        html_content = html_content.replace("</head>", zh_locale_inject + "</head>")
     
     # 替换月份英文为中文
     month_map = {
@@ -143,26 +186,7 @@ def plot_stock_chart(excel_file: str, sheet_name: str = "上证综合指数", ye
     for en_month, cn_month in month_map.items():
         html_content = html_content.replace(en_month, cn_month)
     
-    # 替换工具栏英文提示为中文
-    toolbar_translations = {
-        'Download plot as a png': '下载为PNG图片',
-        'Zoom': '缩放',
-        'Pan': '平移',
-        'Box Select': '框选',
-        'Lasso Select': '套索选择',
-        'Zoom in': '放大',
-        'Zoom out': '缩小',
-        'Autoscale': '自动缩放',
-        'Reset axes': '重置坐标轴',
-        'Toggle Spike Lines': '切换辅助线',
-        'Show closest data on hover': '悬停显示数据',
-        'Compare data on hover': '悬停对比数据'
-    }
-    
-    for en_text, cn_text in toolbar_translations.items():
-        html_content = html_content.replace(f'"{en_text}"', f'"{cn_text}"')
-        html_content = html_content.replace(f"'{en_text}'", f"'{cn_text}'")
-        html_content = html_content.replace(f'>{en_text}<', f'>{cn_text}<')
+    # 工具栏 tooltip 文案由 Plotly 的 zh-cn locale 控制；不再用字符串替换的方式“硬改”，避免漏改/误改
     
     # 写入文件
     with open(output_html, 'w', encoding='utf-8') as f:
