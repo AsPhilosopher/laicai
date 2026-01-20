@@ -4,31 +4,22 @@ from datetime import datetime, timedelta
 import os
 
 
-def _load_sheet_change_series(excel_file: str, sheet_name: str) -> pd.DataFrame:
+def _load_sheet_series(excel_file: str, sheet_name: str, value_type: str = "change") -> pd.DataFrame:
     """
     读取并标准化单个 sheet，只保留两列：
     - 日期: datetime64[ns]
-    - 涨跌幅: float（单位：百分数，例如 0.09 表示 0.09%）
+    - 数值: float
 
-    兼容两种表结构：
-    - 日期列：'日期Date'(YYYYMMDD) 或 '日期'(YYYY-MM-DD)
-    - 涨跌幅列：'涨跌幅' 或 '涨跌幅(%)Change(%)'
-    同时兼容以下几种原始值：
-    - 字符串："0.09%" / "-1.23%" 等
-    - 数值：0.0009（表示 0.09%）或 0.09（表示 0.09%）
-    最终统一为“百分数”：0.09 / -1.23 ...
+    参数:
+        value_type:
+            - "change": 涨跌幅（支持列名 '涨跌幅' 或 '涨跌幅(%)Change(%)'）
+            - "close": 收盘价（支持列名 '收盘Close' 或 '收盘价'）
+
+    兼容两种日期列：
+        - '日期Date'(YYYYMMDD)
+        - '日期'(YYYY-MM-DD)
     """
     df = pd.read_excel(excel_file, sheet_name=sheet_name, engine='openpyxl')
-
-    # 统一涨跌幅列名
-    if '涨跌幅' in df.columns:
-        change_col = '涨跌幅'
-    elif '涨跌幅(%)Change(%)' in df.columns:
-        change_col = '涨跌幅(%)Change(%)'
-    else:
-        raise ValueError(
-            f"[{sheet_name}] 找不到涨跌幅列，支持 '涨跌幅' 或 '涨跌幅(%)Change(%)'，当前列: {df.columns.tolist()}"
-        )
 
     # 统一日期列名并解析
     if '日期Date' in df.columns:
@@ -43,53 +34,85 @@ def _load_sheet_change_series(excel_file: str, sheet_name: str) -> pd.DataFrame:
     if date_parsed.isna().all():
         date_parsed = pd.to_datetime(date_series, format='%Y-%m-%d', errors='coerce')
 
-    # 处理涨跌幅数值：统一为“百分数”
-    raw_change = df[change_col]
-
-    def _to_percent(x):
-        # 目标：统一成“百分数本身”，例如 0.9 表示 0.9%
-        if isinstance(x, str):
-            x = x.strip()
-            if not x:
-                return None
-            if x.endswith('%'):
-                x = x[:-1]
-            try:
-                v = float(x)
-            except ValueError:
-                return None
-            # 带 % 的字符串通常已经是百分数本身，例如 "0.9%" -> 0.9
-            return v
+    # 根据不同类型选择列并做清洗
+    value_type = (value_type or "change").lower()
+    if value_type == "change":
+        # 统一涨跌幅列名
+        if '涨跌幅' in df.columns:
+            change_col = '涨跌幅'
+        elif '涨跌幅(%)Change(%)' in df.columns:
+            change_col = '涨跌幅(%)Change(%)'
         else:
-            # 数值型：直接视为百分数本身，例如 0.9 -> 0.9（表示 0.9%）
-            try:
-                v = float(x)
-            except (TypeError, ValueError):
-                return None
-            return v
+            raise ValueError(
+                f"[{sheet_name}] 找不到涨跌幅列，支持 '涨跌幅' 或 '涨跌幅(%)Change(%)'，当前列: {df.columns.tolist()}"
+            )
 
-    change_percent = raw_change.map(_to_percent)
+        raw_change = df[change_col]
+
+        def _to_percent(x):
+            # 目标：统一成“百分数本身”，例如 0.9 表示 0.9%
+            if isinstance(x, str):
+                x = x.strip()
+                if not x:
+                    return None
+                if x.endswith('%'):
+                    x = x[:-1]
+                try:
+                    v = float(x)
+                except ValueError:
+                    return None
+                # 带 % 的字符串通常已经是百分数本身，例如 "0.9%" -> 0.9
+                return v
+            else:
+                # 数值型：直接视为百分数本身，例如 0.9 -> 0.9（表示 0.9%）
+                try:
+                    v = float(x)
+                except (TypeError, ValueError):
+                    return None
+                return v
+
+        value_series = raw_change.map(_to_percent)
+
+    elif value_type == "close":
+        # 收盘价列名
+        if '收盘Close' in df.columns:
+            close_col = '收盘Close'
+        elif '收盘价' in df.columns:
+            close_col = '收盘价'
+        else:
+            raise ValueError(
+                f"[{sheet_name}] 找不到收盘价列，支持 '收盘Close' 或 '收盘价'，当前列: {df.columns.tolist()}"
+            )
+
+        value_series = pd.to_numeric(df[close_col], errors='coerce')
+
+    else:
+        raise ValueError(f"不支持的 value_type: {value_type}，仅支持 'change' 或 'close'")
 
     out = pd.DataFrame({
         '日期': date_parsed,
-        '涨跌幅': change_percent,
+        '数值': value_series,
     })
-    # 丢掉无法解析的日期或涨跌幅，以及“说明数据”等行
-    out = out.dropna(subset=['日期', '涨跌幅'])
+    # 丢掉无法解析的日期或数值，以及“说明数据”等行
+    out = out.dropna(subset=['日期', '数值'])
     return out
 
 
 def plot_stock_chart(excel_file: str,
                      sheet_name: str = "上证综合指数",
                      years: int = 3,
+                     value_type: str = "change",
                      output_html: str = None):
     """
-    绘制指数“涨跌幅”折线图，支持交互式缩放和鼠标悬停显示坐标，输出为HTML5格式。
+    绘制指数折线图（支持“涨跌幅”或“收盘价”），支持交互式缩放和鼠标悬停显示坐标，输出为HTML5格式。
     
     Args:
         excel_file: Excel文件路径
         sheet_name: Sheet名称（支持传单个字符串，或传列表/元组以叠加多条曲线）
         years: 显示近N年的数据
+        value_type: 指标类型
+            - "change": 绘制涨跌幅（默认，与原来行为一致）
+            - "close": 绘制收盘价（列名支持 '收盘Close' 或 '收盘价'）
         output_html: 输出的HTML文件路径，如果为None则使用默认路径
     """
     # 兼容单 sheet / 多 sheet
@@ -105,6 +128,21 @@ def plot_stock_chart(excel_file: str,
     end_date = datetime.now()
     start_date = end_date - timedelta(days=years * 365)
 
+    # 根据 value_type 设置展示文案
+    vt = (value_type or "change").lower()
+    if vt == "change":
+        metric_cn = "涨跌幅"
+        yaxis_title = "涨跌幅(%)"
+        hover_unit = "%"
+        file_metric = "涨跌幅走势图"
+    elif vt == "close":
+        metric_cn = "收盘价"
+        yaxis_title = "收盘价"
+        hover_unit = ""
+        file_metric = "收盘价走势图"
+    else:
+        raise ValueError(f"不支持的 value_type: {value_type}，仅支持 'change' 或 'close'")
+
     # 创建plotly图表
     fig = go.Figure()
 
@@ -113,7 +151,7 @@ def plot_stock_chart(excel_file: str,
 
     all_filtered = []
     for i, sn in enumerate(sheet_names):
-        df_sheet = _load_sheet_change_series(excel_file, sn)
+        df_sheet = _load_sheet_series(excel_file, sn, value_type=vt)
         df_f = df_sheet[df_sheet['日期'] >= start_date].copy()
         df_f = df_f.sort_values('日期')
         if df_f.empty:
@@ -124,12 +162,12 @@ def plot_stock_chart(excel_file: str,
 
         fig.add_trace(go.Scatter(
             x=df_f['日期'],
-            y=df_f['涨跌幅'],
+            y=df_f['数值'],
             mode='lines',
             name=sn,
             line=dict(color=palette[i % len(palette)], width=2),
             hovertemplate='<b>日期</b>: %{x|%Y-%m-%d}<br>'
-                          f'<b>{sn} 涨跌幅</b>: ' + '%{y:.2f}%<br>'
+                          f'<b>{sn} {metric_cn}</b>: ' + '%{y:.2f}' + hover_unit + '<br>'
                           '<extra></extra>',
         ))
 
@@ -147,7 +185,7 @@ def plot_stock_chart(excel_file: str,
     # 设置图表布局
     fig.update_layout(
         title={
-            'text': f'{" + ".join(sheet_names)} - 近{years}年涨跌幅走势图',
+            'text': f'{" + ".join(sheet_names)} - 近{years}年{metric_cn}走势图',
             'x': 0.5,
             'xanchor': 'center',
             'font': {'size': 20, 'family': 'Arial, sans-serif'}
@@ -173,7 +211,7 @@ def plot_stock_chart(excel_file: str,
             type="date"
         ),
         yaxis=dict(
-        title=dict(text='涨跌幅(%)', font=dict(size=14)),
+        title=dict(text=yaxis_title, font=dict(size=14)),
             showgrid=True,
             gridcolor='rgba(128, 128, 128, 0.2)'
         ),
@@ -197,7 +235,7 @@ def plot_stock_chart(excel_file: str,
         if not excel_dir:
             excel_dir = os.getcwd()
         safe_name = "_".join(sheet_names)
-        output_html = os.path.join(excel_dir, f"{safe_name}_近{years}年涨跌幅走势图.html")
+        output_html = os.path.join(excel_dir, f"{safe_name}_近{years}年{file_metric}.html")
     
     # 保存为HTML文件
     print(f"\n正在生成HTML文件: {output_html}")
@@ -212,7 +250,7 @@ def plot_stock_chart(excel_file: str,
         'modeBarButtonsToRemove': [],
         'toImageButtonOptions': {
             'format': 'png',
-            'filename': f'{sheet_name}_近{years}年价格走势图',
+            'filename': f'{"_".join(sheet_names)}_近{years}年{file_metric}',
             'height': 700,
             'width': 1400,
             'scale': 1
@@ -301,10 +339,12 @@ if __name__ == "__main__":
     excel_file = "/Users/chenzhangjie/Downloads/股票指数数据.xlsx"
     # sheet_name = ["上证综合指数", "深证成分指数", "沪深300指数", "中证小盘500指数", "中证1000指数", "创业板指数"]
     sheet_name = ["上证综合指数", "深证成分指数", "创业板指数"]
+    # sheet_name = ["深证成分指数"]
     years = 10
     
     try:
-        output_file = plot_stock_chart(excel_file, sheet_name, years)
+        # output_file = plot_stock_chart(excel_file, sheet_name, years)
+        output_file = plot_stock_chart(excel_file, sheet_name, years, "close")
         print(f"\n完成！HTML文件已保存到: {output_file}")
     except Exception as e:
         print(f"错误: {e}")
