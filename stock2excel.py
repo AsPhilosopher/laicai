@@ -13,7 +13,9 @@ INDEX_MAP = {
     "000016": "上证50指数",
     "000905": "中证小盘500指数",
     "000852": "中证1000指数",
-    "000680": "上证科创板综合指数"
+    "000680": "上证科创板综合指数",
+    "399001": "深证成分指数",  # 新增：深证成指
+    "399006": "创业板指数"   # 新增：创业板指
 }
 
 
@@ -31,6 +33,20 @@ def get_date_range(years: int = 10) -> Tuple[str, str]:
     return start_date_str, end_date_str
 
 
+def convert_date_format(date_str: str) -> str:
+    """
+    将YYYYMMDD格式转换为YYYY-MM-DD格式
+    """
+    if len(date_str) != 8:
+        raise ValueError("日期格式不正确，应为YYYYMMDD")
+    
+    year = date_str[:4]
+    month = date_str[4:6]
+    day = date_str[6:8]
+    
+    return f"{year}-{month}-{day}"
+
+
 def download_index_data(index_code: str, start_date: str, end_date: str) -> bytes:
     """
     下载指定指数的Excel数据
@@ -43,58 +59,113 @@ def download_index_data(index_code: str, start_date: str, end_date: str) -> byte
     Returns:
         Excel文件的二进制数据
     """
-    url = "https://www.csindex.com.cn/csindex-home/exportExcel/downloadindex-perf"
-    
-    headers = {
-        'Accept': 'application/json, text/plain, */*',
-        'Accept-Language': 'zh-CN,zh;q=0.9',
-        'Connection': 'keep-alive',
-        'Content-Type': 'application/json;charset=UTF-8',
-        'Origin': 'https://www.csindex.com.cn',
-        'Referer': 'https://www.csindex.com.cn/',
-        'Sec-Fetch-Dest': 'empty',
-        'Sec-Fetch-Mode': 'cors',
-        'Sec-Fetch-Site': 'same-origin',
-        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36',
-        'sec-ch-ua': '"Google Chrome";v="143", "Chromium";v="143", "Not A(Brand";v="24"',
-        'sec-ch-ua-mobile': '?0',
-        'sec-ch-ua-platform': '"macOS"'
-    }
-    
-    # 构建请求数据
-    data = [{
-        "startDate": start_date,
-        "endDate": end_date,
-        "indexCode": index_code
-    }]
-    
-    try:
-        print(f"正在下载 {INDEX_MAP.get(index_code, index_code)} ({index_code}) 的数据...")
-        response = requests.post(
-            url,
-            headers=headers,
-            json=data,
-            params={"language": "CH"},
-            timeout=60
-        )
-        response.raise_for_status()
+    # 判断是否为新的API支持的指数（399001或399006）
+    if index_code in ["399001", "399006"]:
+        # 使用新的API端点
+        url = "https://hq.cnindex.com.cn/market/market/downloadDailyMarketExcel"
         
-        # 检查响应内容类型
-        content_type = response.headers.get('Content-Type', '')
-        if 'excel' in content_type.lower() or 'spreadsheet' in content_type.lower() or response.content.startswith(b'PK'):
-            return response.content
-        else:
-            # 如果不是Excel文件，尝试解析为JSON查看错误信息
-            try:
-                error_info = response.json()
-                print(f"错误: {error_info}")
-            except:
-                print(f"响应内容: {response.text[:200]}")
-            raise Exception(f"响应不是Excel文件，Content-Type: {content_type}")
+        headers = {
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7',
+            'Accept-Language': 'zh-CN,zh;q=0.9',
+            'Cache-Control': 'max-age=0',
+            'Connection': 'keep-alive',
+            'Content-Type': 'application/x-www-form-urlencoded',
+            'Origin': 'https://www.cnindex.com.cn',
+            'Referer': 'https://www.cnindex.com.cn/',
+            'Sec-Fetch-Dest': 'document',
+            'Sec-Fetch-Mode': 'navigate',
+            'Sec-Fetch-Site': 'same-site',
+            'Sec-Fetch-User': '?1',
+            'Upgrade-Insecure-Requests': '1',
+            'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/135.0.0.0 Safari/537.36',
+            'sec-ch-ua': '"Chromium";v="135", "Not-A.Brand";v="8"',
+            'sec-ch-ua-mobile': '?0',
+            'sec-ch-ua-platform': '"macOS"'
+        }
+        
+        # 转换日期格式
+        start_date_formatted = convert_date_format(start_date)
+        end_date_formatted = convert_date_format(end_date)
+        
+        # 构建请求数据
+        data = f"indexCode={index_code}&startDate={start_date_formatted}&endDate={end_date_formatted}&frequency=day"
+        
+        try:
+            print(f"正在下载 {INDEX_MAP.get(index_code, index_code)} ({index_code}) 的数据...")
+            response = requests.post(
+                url,
+                headers=headers,
+                data=data,
+                cookies={'language': 'zh_CN', 'fileDownload': 'true'},
+                timeout=60
+            )
+            response.raise_for_status()
             
-    except requests.exceptions.RequestException as e:
-        print(f"下载 {index_code} 数据失败: {e}")
-        raise
+            # 检查响应内容类型
+            content_type = response.headers.get('Content-Type', '')
+            if 'excel' in content_type.lower() or 'spreadsheet' in content_type.lower() or response.content.startswith(b'PK'):
+                return response.content
+            else:
+                print(f"响应内容: {response.text[:200]}")
+                raise Exception(f"响应不是Excel文件，Content-Type: {content_type}")
+                
+        except requests.exceptions.RequestException as e:
+            print(f"下载 {index_code} 数据失败: {e}")
+            raise
+    else:
+        # 使用原来的API端点
+        url = "https://www.csindex.com.cn/csindex-home/exportExcel/downloadindex-perf"
+        
+        headers = {
+            'Accept': 'application/json, text/plain, */*',
+            'Accept-Language': 'zh-CN,zh;q=0.9',
+            'Connection': 'keep-alive',
+            'Content-Type': 'application/json;charset=UTF-8',
+            'Origin': 'https://www.csindex.com.cn',
+            'Referer': 'https://www.csindex.com.cn/',
+            'Sec-Fetch-Dest': 'empty',
+            'Sec-Fetch-Mode': 'cors',
+            'Sec-Fetch-Site': 'same-origin',
+            'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36',
+            'sec-ch-ua': '"Google Chrome";v="143", "Chromium";v="143", "Not A(Brand";v="24"',
+            'sec-ch-ua-mobile': '?0',
+            'sec-ch-ua-platform': '"macOS"'
+        }
+        
+        # 构建请求数据
+        data = [{
+            "startDate": start_date,
+            "endDate": end_date,
+            "indexCode": index_code
+        }]
+        
+        try:
+            print(f"正在下载 {INDEX_MAP.get(index_code, index_code)} ({index_code}) 的数据...")
+            response = requests.post(
+                url,
+                headers=headers,
+                json=data,
+                params={"language": "CH"},
+                timeout=60
+            )
+            response.raise_for_status()
+            
+            # 检查响应内容类型
+            content_type = response.headers.get('Content-Type', '')
+            if 'excel' in content_type.lower() or 'spreadsheet' in content_type.lower() or response.content.startswith(b'PK'):
+                return response.content
+            else:
+                # 如果不是Excel文件，尝试解析为JSON查看错误信息
+                try:
+                    error_info = response.json()
+                    print(f"错误: {error_info}")
+                except:
+                    print(f"响应内容: {response.text[:200]}")
+                raise Exception(f"响应不是Excel文件，Content-Type: {content_type}")
+                
+        except requests.exceptions.RequestException as e:
+            print(f"下载 {index_code} 数据失败: {e}")
+            raise
 
 
 def read_excel_from_bytes(excel_bytes: bytes) -> pd.DataFrame:
