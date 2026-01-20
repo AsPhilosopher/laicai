@@ -334,8 +334,7 @@ def plot_stock_chart(excel_file: str,
     
     return output_html
 
-
-if __name__ == "__main__":
+def main():
     excel_file = "/Users/chenzhangjie/Downloads/股票指数数据.xlsx"
     # sheet_name = ["上证综合指数", "深证成分指数", "沪深300指数", "中证小盘500指数", "中证1000指数", "创业板指数"]
     sheet_name = ["上证综合指数", "深证成分指数", "创业板指数"]
@@ -343,10 +342,15 @@ if __name__ == "__main__":
     years = 10
     
     try:
-        # output_file = plot_stock_chart(excel_file, sheet_name, years)
+        output_file = plot_stock_chart(excel_file, sheet_name, years)
+        print(f"\n完成！HTML文件已保存到: {output_file}")
+
         output_file = plot_stock_chart(excel_file, sheet_name, years, "close")
         print(f"\n完成！HTML文件已保存到: {output_file}")
     except Exception as e:
         print(f"错误: {e}")
         import traceback
         traceback.print_exc()
+
+if __name__ == "__main__":
+    main()

@@ -170,7 +170,7 @@ def plot_gold_close_price(excel_file: str,
     return output_html
 
 
-if __name__ == "__main__":
+def main():
     excel_file = "/Users/chenzhangjie/Downloads/黄金（Au99.99）.xlsx"
     sheet_name = 0  # 若有多个 sheet，请调整
     years = 10
@@ -182,3 +182,6 @@ if __name__ == "__main__":
         print(f"错误: {e}")
         import traceback
         traceback.print_exc()
+
+if __name__ == "__main__":
+    main()

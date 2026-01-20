@@ -229,7 +229,7 @@ def plot_stock_chart(excel_file: str,
     return output_html
 
 
-if __name__ == "__main__":
+def main():
     excel_file = "/Users/chenzhangjie/Downloads/股票指数数据.xlsx"
     sheet_name = "上证综合指数"
     years = 10
@@ -245,3 +245,6 @@ if __name__ == "__main__":
         print(f"错误: {e}")
         import traceback
         traceback.print_exc()
+
+if __name__ == "__main__":
+    main()
