@@ -82,7 +82,6 @@ def _load_sheet_change_series(excel_file: str, sheet_name: str) -> pd.DataFrame:
 def plot_stock_chart(excel_file: str,
                      sheet_name: str = "上证综合指数",
                      years: int = 3,
-                     metrics=None,
                      output_html: str = None):
     """
     绘制指数“涨跌幅”折线图，支持交互式缩放和鼠标悬停显示坐标，输出为HTML5格式。
@@ -91,7 +90,6 @@ def plot_stock_chart(excel_file: str,
         excel_file: Excel文件路径
         sheet_name: Sheet名称（支持传单个字符串，或传列表/元组以叠加多条曲线）
         years: 显示近N年的数据
-        metrics: 目前已不再使用，统一只绘制“涨跌幅”一条曲线，可忽略此参数
         output_html: 输出的HTML文件路径，如果为None则使用默认路径
     """
     # 兼容单 sheet / 多 sheet
@@ -301,15 +299,12 @@ def plot_stock_chart(excel_file: str,
 
 if __name__ == "__main__":
     excel_file = "/Users/chenzhangjie/Downloads/股票指数数据.xlsx"
-    sheet_name = ["上证综合指数", "深证成分指数"]
+    # sheet_name = ["上证综合指数", "深证成分指数", "沪深300指数", "中证小盘500指数", "中证1000指数", "创业板指数"]
+    sheet_name = ["上证综合指数", "深证成分指数", "创业板指数"]
     years = 10
-    # metrics=None
-    metrics=['收盘Close']
-    # metrics=['开盘Open', '收盘Close']
-    # metrics=['开盘Open', '收盘Close', '最高High', '最低Low']
     
     try:
-        output_file = plot_stock_chart(excel_file, sheet_name, years , metrics)
+        output_file = plot_stock_chart(excel_file, sheet_name, years)
         print(f"\n完成！HTML文件已保存到: {output_file}")
     except Exception as e:
         print(f"错误: {e}")
