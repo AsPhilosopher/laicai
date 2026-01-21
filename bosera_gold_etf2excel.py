@@ -440,8 +440,10 @@ def export_fund_to_excel(fund_code: str = "159937", years: int = 10, output_file
         print(f"保存Excel文件失败: {e}")
         raise
 
+def main(n_years=5):
+    # 导出博时黄金ETF数据
+    export_fund_to_excel(fund_code="159937", years=n_years)
+    print("\n所有数据导出完成！")
 
 if __name__ == "__main__":
-    # 导出博时黄金ETF数据
-    export_fund_to_excel(fund_code="159937", years=10)
-    print("\n所有数据导出完成！")
+    main(n_years=10)

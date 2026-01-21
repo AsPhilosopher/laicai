@@ -230,7 +230,7 @@ def plot_au9999_vs_bosera_etf(
     return output_html
 
 
-def main(n_years: int = 10):
+def main(n_years=5):
     # 使用相对路径：以当前脚本所在目录为基准定位到项目的 output/ 目录
     project_dir = os.path.dirname(os.path.abspath(__file__))
     base_dir = os.path.join(project_dir, "output")

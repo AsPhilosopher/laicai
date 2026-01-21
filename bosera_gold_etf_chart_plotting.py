@@ -169,16 +169,17 @@ def plot_bosera_gold_etf_nav(excel_file: str,
     print(f"\n✓ HTML文件已生成: {output_html}")
     return output_html
 
-
-if __name__ == "__main__":
+def main(n_years=5):
     excel_file = "output/博时黄金ETF数据.xlsx"
     sheet_name = 0  # 若有特定 sheet 名称请修改
-    years = 10
 
     try:
-        output_file = plot_bosera_gold_etf_nav(excel_file, sheet_name, years)
+        output_file = plot_bosera_gold_etf_nav(excel_file, sheet_name, n_years)
         print(f"\n完成！HTML文件已保存到: {output_file}")
     except Exception as e:
         print(f"错误: {e}")
         import traceback
         traceback.print_exc()
+
+if __name__ == "__main__":
+    main(n_years=10)
