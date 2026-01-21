@@ -42,7 +42,8 @@ def parse_number(value):
     if isinstance(value, str):
         # 移除逗号和其他非数字字符（保留负号）
         cleaned = re.sub(r'[^\d.-]', '', value)
-        if cleaned == '':
+        # 常见占位符：'-' 或者清洗后只剩下符号/小数点
+        if cleaned in ('', '-', '.', '-.', '.-'):
             return None
         return float(cleaned)
     return float(value)
@@ -530,10 +531,95 @@ def add_chinese_headers(df):
     return df
 
 
+def coerce_numeric_and_percentage_columns(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    强制把“应为数值/百分比”的列转换成正确 dtype。
+
+    背景：增量更新时会先 pd.read_excel 读入旧数据，Excel 里的数值列经常被读成 object（文本）；
+    与新数据 concat 后整列会被“提升”为 object，导致写回 Excel 后看起来不再是数值类型。
+    这里同时兼容英文列名与 add_chinese_headers 之后的“英文(中文)”列名。
+    """
+    if df is None or df.empty:
+        return df
+
+    header_mapping = {
+        'Date': '日期',
+        'Contract': '合约',
+        'Open': '开盘价',
+        'Highest': '最高价',
+        'Lowest': '最低价',
+        'Close': '收盘价',
+        'Up/Down(yuan)': '涨跌(元)',
+        'Up/Down(%)': '涨跌(%)',
+        'Weighted Average Price': '加权平均价格',
+        'Volume(Kg)': '成交量(千克)',
+        'Amount(yuan)': '金额(元)',
+        'Open Interest(Lot)': '开盘价持仓量(批次)',
+        'Direction': '方向',
+        'Delivery Volume (Lot)': '交割成交量(批次)'
+    }
+
+    numeric_columns = [
+        'Open', 'Highest', 'Lowest', 'Close', 'Up/Down(yuan)',
+        'Weighted Average Price', 'Volume(Kg)', 'Amount(yuan)',
+        'Open Interest(Lot)', 'Delivery Volume (Lot)'
+    ]
+    percentage_columns = ['Up/Down(%)']
+
+    def candidate_names(col_en: str) -> list:
+        """
+        生成可能的列名变体：
+        - 原始英文名（可能带空格）
+        - NBSP 版本（Excel/网页拷贝后常见 \xa0）
+        - 去空格版本（WeightedAveragePrice / OpenInterest(Lot) 等）
+        - 上述三种的“英文(中文)”版本
+        """
+        base_variants = []
+        base_variants.append(col_en)
+        base_variants.append(col_en.replace(" ", "\xa0"))
+        base_variants.append(col_en.replace(" ", ""))
+
+        # 针对历史文件里常见的“只去掉部分空格”的列名（例如 Weighted AveragePrice）
+        base_variants.append(col_en.replace("Average Price", "AveragePrice"))
+        base_variants.append(col_en.replace("Average Price", "AveragePrice").replace(" ", "\xa0"))
+
+        # 去重但保序
+        seen = set()
+        uniq = []
+        for v in base_variants:
+            if v not in seen:
+                seen.add(v)
+                uniq.append(v)
+
+        names = list(uniq)
+        if col_en in header_mapping:
+            cn = header_mapping[col_en]
+            for v in uniq:
+                names.append(f"{v}({cn})")
+        return names
+
+    # 数值列：用 parse_number 兜底处理逗号/空字符串/杂字符
+    for col_en in numeric_columns:
+        for col in candidate_names(col_en):
+            if col in df.columns:
+                df[col] = df[col].apply(parse_number)
+
+    # 百分比列：用 parse_percentage 转成 0~1 的小数
+    for col_en in percentage_columns:
+        for col in candidate_names(col_en):
+            if col in df.columns:
+                df[col] = df[col].apply(parse_percentage)
+
+    return df
+
+
 def format_excel_with_percentages(df, output_path):
     """
     将DataFrame保存到Excel，并设置百分比格式
     """
+    # 写入前做一次兜底类型转换，避免增量合并后数值列被写成文本
+    df = coerce_numeric_and_percentage_columns(df)
+
     with pd.ExcelWriter(output_path, engine='openpyxl') as writer:
         df.to_excel(writer, sheet_name='黄金数据', index=False)
 
@@ -650,6 +736,7 @@ def main(n_years=5):
 
         # 读取现有Excel文件
         existing_df = pd.read_excel(output_path)
+        existing_df = coerce_numeric_and_percentage_columns(existing_df)
 
         if not existing_df.empty and 'Date(日期)' in existing_df.columns:
             # 获取现有数据中的最晚日期
@@ -670,9 +757,11 @@ def main(n_years=5):
                 if not new_gold_df.empty:
                     # 添加中文表头释义
                     new_gold_df = add_chinese_headers(new_gold_df)
+                    new_gold_df = coerce_numeric_and_percentage_columns(new_gold_df)
 
                     # 合并数据
                     combined_df = pd.concat([existing_df, new_gold_df], ignore_index=True)
+                    combined_df = coerce_numeric_and_percentage_columns(combined_df)
 
                     # 保存到Excel并设置百分比格式
                     format_excel_with_percentages(combined_df, output_path)
