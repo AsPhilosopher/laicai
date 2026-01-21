@@ -86,7 +86,7 @@ def _default_output_path(excel_file: str) -> str:
     base_dir = os.path.dirname(excel_file)
     if not base_dir:
         base_dir = os.getcwd()
-    return os.path.join(base_dir, "彩票走势图.html")
+    return os.path.join(base_dir, "彩票数字统计图.html")
 
 
 def _build_html(ssq_rows: List[Dict[str, Any]], dlt_rows: List[Dict[str, Any]]) -> str:
