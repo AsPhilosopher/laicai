@@ -199,6 +199,20 @@ def process_fund_data(data: List[Dict[str, Any]]) -> pd.DataFrame:
         rows.append(row)
     
     df = pd.DataFrame(rows)
+
+    # 重要：强制把“数值列”转换为数值类型（否则增量合并后可能整列变为 object，写入 Excel 变成文本）
+    numeric_columns = [
+        "单位净值(元)",
+        "累计净值(元)",
+        "日涨跌(%)",
+        "最近7天收益率(%)",
+        "最近30日收益率(%)",
+        "今年以来收益率(%)",
+        "成立以来收益率(%)",
+    ]
+    for col in numeric_columns:
+        if col in df.columns:
+            df[col] = pd.to_numeric(df[col], errors="coerce")
     
     # 按日期排序（从早到晚）
     if not df.empty and "日期" in df.columns:
@@ -225,7 +239,122 @@ def export_fund_to_excel(fund_code: str = "159937", years: int = 10, output_file
     output_dir = "output"
     os.makedirs(output_dir, exist_ok=True)
     
-    print(f"开始获取博时黄金ETF ({fund_code}) 近 {years} 年的数据...")
+    # 如果已经存在历史Excel，则只拉取“最后日期之后”的增量数据
+    if os.path.exists(output_file):
+        print(f"检测到已存在历史数据文件：{output_file}")
+        try:
+            old_df = pd.read_excel(output_file, engine='openpyxl')
+        except Exception as e:
+            print(f"读取历史Excel失败，将改为全量重新拉取数据。错误信息：{e}")
+            old_df = None
+        
+        if old_df is not None and not old_df.empty and "日期" in old_df.columns:
+            # 解析日期并找到历史数据中的最后日期
+            old_df["日期"] = pd.to_datetime(old_df["日期"], errors="coerce")
+            max_date = old_df["日期"].max()
+
+            # 对旧数据做一次数值列标准化，避免和新数据 concat 后整列变成 object（写回 Excel 变文本）
+            numeric_columns = [
+                "单位净值(元)",
+                "累计净值(元)",
+                "日涨跌(%)",
+                "最近7天收益率(%)",
+                "最近30日收益率(%)",
+                "今年以来收益率(%)",
+                "成立以来收益率(%)",
+            ]
+            for col in numeric_columns:
+                if col in old_df.columns:
+                    old_df[col] = pd.to_numeric(old_df[col], errors="coerce")
+            
+            if pd.isna(max_date):
+                print("历史Excel中的日期列无法解析，将改为全量重新拉取数据。")
+            else:
+                start_date = (max_date + timedelta(days=1)).strftime("%Y-%m-%d")
+                end_date = datetime.now().strftime("%Y-%m-%d")
+                
+                if start_date > end_date:
+                    print("历史数据已经是最新，无需更新。")
+                    return
+                
+                print(f"开始增量更新博时黄金ETF ({fund_code}) 数据...")
+                print(f"历史最后日期为 {max_date.strftime('%Y-%m-%d')}，本次拉取区间：{start_date} 至 {end_date}")
+                print("=" * 60)
+                
+                # 增量区间通常较短，直接请求一个完整时间段即可
+                new_data = get_all_fund_data(fund_code, start_date, end_date)
+                
+                if not new_data:
+                    print("API 未返回任何新增数据，Excel 保持不变。")
+                    return
+                
+                print(f"本次共获取 {len(new_data)} 条新增数据，正在合并到历史数据中...")
+                new_df = process_fund_data(new_data)
+                
+                # 将新旧数据合并并去重
+                combined_df = pd.concat([old_df, new_df], ignore_index=True)
+                # 再次确保日期为字符串格式，且按日期去重、排序
+                combined_df["日期"] = pd.to_datetime(combined_df["日期"], errors="coerce")
+                combined_df = combined_df.dropna(subset=["日期"])
+                combined_df = combined_df.drop_duplicates(subset=["日期"]).sort_values("日期")
+                combined_df["日期"] = combined_df["日期"].dt.strftime("%Y-%m-%d")
+                
+                df = combined_df
+                
+                print("正在将合并后的数据保存到Excel...")
+                try:
+                    with pd.ExcelWriter(output_file, engine='openpyxl') as writer:
+                        df.to_excel(writer, index=False, sheet_name='Sheet1')
+                        
+                        # 获取工作表对象
+                        worksheet = writer.sheets['Sheet1']
+                        
+                        # 定义百分比列
+                        percentage_columns = [
+                            "日涨跌(%)",
+                            "最近7天收益率(%)",
+                            "最近30日收益率(%)",
+                            "今年以来收益率(%)",
+                            "成立以来收益率(%)"
+                        ]
+
+                        # 定义数值列（净值/累计净值）格式
+                        value_columns = [
+                            "单位净值(元)",
+                            "累计净值(元)",
+                        ]
+                        
+                        # 获取列索引
+                        column_indices = {col: df.columns.get_loc(col) for col in percentage_columns if col in df.columns}
+                        value_column_indices = {col: df.columns.get_loc(col) for col in value_columns if col in df.columns}
+                        
+                        # 应用百分数格式
+                        for col_name, col_idx in column_indices.items():
+                            # 列索引从0开始，但Excel列索引从1开始，所以需要+1
+                            # 行索引从2开始（第1行是标题，第2行开始是数据）
+                            for row_idx in range(2, len(df) + 2):
+                                cell = worksheet.cell(row=row_idx, column=col_idx + 1)
+                                # 设置百分数格式（保留2位小数）
+                                cell.number_format = '0.00%'
+
+                        # 应用净值数字格式（保留4位小数，更符合净值展示习惯）
+                        for col_name, col_idx in value_column_indices.items():
+                            for row_idx in range(2, len(df) + 2):
+                                cell = worksheet.cell(row=row_idx, column=col_idx + 1)
+                                cell.number_format = '0.0000'
+                    
+                    print(f"\n✓ 增量更新完成，数据已成功保存到: {output_file}")
+                    print(f"当前共 {len(df)} 条记录")
+                    if not df.empty:
+                        print(f"日期范围: {df['日期'].iloc[0]} 至 {df['日期'].iloc[-1]}")
+                    return
+                except Exception as e:
+                    print(f"保存增量更新后的Excel文件失败，将不中断但请手动检查。错误信息：{e}")
+                    raise
+        # 如果旧文件不可用或格式不符合预期，则继续走下面的“全量拉取”逻辑
+    
+    # 不存在历史Excel，或历史文件不可用：按原逻辑全量获取近 N 年数据
+    print(f"开始获取博时黄金ETF ({fund_code}) 近 {years} 年的数据（全量拉取）...")
     print("=" * 60)
     
     # 获取所有时间段
@@ -277,9 +406,16 @@ def export_fund_to_excel(fund_code: str = "159937", years: int = 10, output_file
                 "今年以来收益率(%)",
                 "成立以来收益率(%)"
             ]
+
+            # 定义数值列（净值/累计净值）格式
+            value_columns = [
+                "单位净值(元)",
+                "累计净值(元)",
+            ]
             
             # 获取列索引
             column_indices = {col: df.columns.get_loc(col) for col in percentage_columns if col in df.columns}
+            value_column_indices = {col: df.columns.get_loc(col) for col in value_columns if col in df.columns}
             
             # 应用百分数格式
             for col_name, col_idx in column_indices.items():
@@ -289,6 +425,12 @@ def export_fund_to_excel(fund_code: str = "159937", years: int = 10, output_file
                     cell = worksheet.cell(row=row_idx, column=col_idx + 1)
                     # 设置百分数格式（保留2位小数）
                     cell.number_format = '0.00%'
+
+            # 应用净值数字格式（保留4位小数，更符合净值展示习惯）
+            for col_name, col_idx in value_column_indices.items():
+                for row_idx in range(2, len(df) + 2):
+                    cell = worksheet.cell(row=row_idx, column=col_idx + 1)
+                    cell.number_format = '0.0000'
         
         print(f"\n✓ 数据已成功保存到: {output_file}")
         print(f"共 {len(df)} 条记录")
