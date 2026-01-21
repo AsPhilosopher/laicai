@@ -342,8 +342,10 @@ def export_all_to_excel():
     if dlt_df is not None:
         print(f"  - 大乐透: {len(dlt_df)} 条记录")
 
-
-if __name__ == "__main__":
+def main():
     # 导出所有数据到同一个Excel文件的不同sheet
     export_all_to_excel()
     print("\n所有数据导出完成！")
+
+if __name__ == "__main__":
+    main()

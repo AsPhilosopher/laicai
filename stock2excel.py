@@ -266,12 +266,12 @@ def export_all_indices_to_excel(output_file: str = None, years: int = 10):
         print(f"保存Excel文件失败: {e}")
         raise
 
-def main():
+def main(n_years=5):
     """
     主函数，用于测试
     """
-    export_all_indices_to_excel(years=10)
+    export_all_indices_to_excel(years=n_years)
     print("\n所有数据导出完成！")
 
 if __name__ == "__main__":
-    main()
+    main(n_years=10)

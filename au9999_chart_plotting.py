@@ -170,13 +170,11 @@ def plot_gold_close_price(excel_file: str,
     return output_html
 
 
-def main():
+def main(n_years=5):
     excel_file = "output/黄金（Au99.99）.xlsx"
     sheet_name = 0  # 若有多个 sheet，请调整
-    years = 10
-
     try:
-        output_file = plot_gold_close_price(excel_file, sheet_name, years)
+        output_file = plot_gold_close_price(excel_file, sheet_name, n_years)
         print(f"\n完成！HTML文件已保存到: {output_file}")
     except Exception as e:
         print(f"错误: {e}")
@@ -184,4 +182,4 @@ def main():
         traceback.print_exc()
 
 if __name__ == "__main__":
-    main()
+    main(n_years=10)

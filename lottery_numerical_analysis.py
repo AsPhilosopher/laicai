@@ -300,9 +300,7 @@ def analyze_ssq(file_path, sheet_name='双色球'):
     # 返回处理后的DataFrame，不再单独保存文件
     return df
 
-
-if __name__ == "__main__":
-    # 统一的Excel文件路径
+def main():
     input_file = "output/彩票数据（双色球、大乐透）.xlsx"
     output_file = "output/彩票数据（双色球、大乐透）_分析.xlsx"
     
@@ -338,3 +336,6 @@ if __name__ == "__main__":
     print("=" * 60)
     print("所有分析完成！")
     print("=" * 60)
+
+if __name__ == "__main__":
+    main()
