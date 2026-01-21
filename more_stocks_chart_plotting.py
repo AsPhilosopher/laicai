@@ -335,7 +335,7 @@ def plot_stock_chart(excel_file: str,
     return output_html
 
 def main():
-    excel_file = "/Users/chenzhangjie/Downloads/股票指数数据.xlsx"
+    excel_file = "output/股票指数数据.xlsx"
     # sheet_name = ["上证综合指数", "深证成分指数", "沪深300指数", "中证小盘500指数", "中证1000指数", "创业板指数"]
     sheet_name = ["上证综合指数", "深证成分指数", "创业板指数"]
     # sheet_name = ["深证成分指数"]

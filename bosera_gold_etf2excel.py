@@ -3,6 +3,7 @@ import pandas as pd
 from datetime import datetime, timedelta
 from typing import List, Dict, Any
 import time
+import os
 
 
 def get_date_ranges(years: int = 10) -> List[tuple]:
@@ -218,7 +219,11 @@ def export_fund_to_excel(fund_code: str = "159937", years: int = 10, output_file
         output_file: 输出文件路径，如果为None则使用默认路径
     """
     if output_file is None:
-        output_file = "/Users/chenzhangjie/Downloads/博时黄金ETF数据.xlsx"
+        output_file = "output/博时黄金ETF数据.xlsx"
+    
+    # 确保output文件夹存在
+    output_dir = "output"
+    os.makedirs(output_dir, exist_ok=True)
     
     print(f"开始获取博时黄金ETF ({fund_code}) 近 {years} 年的数据...")
     print("=" * 60)

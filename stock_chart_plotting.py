@@ -230,7 +230,7 @@ def plot_stock_chart(excel_file: str,
 
 
 def main():
-    excel_file = "/Users/chenzhangjie/Downloads/股票指数数据.xlsx"
+    excel_file = "output/股票指数数据.xlsx"
     sheet_name = "上证综合指数"
     years = 10
     # metrics=None

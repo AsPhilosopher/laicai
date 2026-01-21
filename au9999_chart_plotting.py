@@ -171,7 +171,7 @@ def plot_gold_close_price(excel_file: str,
 
 
 def main():
-    excel_file = "/Users/chenzhangjie/Downloads/黄金（Au99.99）.xlsx"
+    excel_file = "output/黄金（Au99.99）.xlsx"
     sheet_name = 0  # 若有多个 sheet，请调整
     years = 10
 

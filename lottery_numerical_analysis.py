@@ -149,7 +149,7 @@ def analyze_dlt(file_path, sheet_name='大乐透'):
                     ha='center', va='bottom', fontsize=9)
     
     plt.tight_layout()
-    plt.savefig('/Users/chenzhangjie/Downloads/大乐透统计图.png', dpi=300, bbox_inches='tight')
+    plt.savefig('output/大乐透统计图.png', dpi=300, bbox_inches='tight')
     print("统计图已保存到 大乐透统计图.png")
     plt.close()
     
@@ -293,7 +293,7 @@ def analyze_ssq(file_path, sheet_name='双色球'):
                     ha='center', va='bottom', fontsize=9)
     
     plt.tight_layout()
-    plt.savefig('/Users/chenzhangjie/Downloads/双色球统计图.png', dpi=300, bbox_inches='tight')
+    plt.savefig('output/双色球统计图.png', dpi=300, bbox_inches='tight')
     print("统计图已保存到 双色球统计图.png")
     plt.close()
     
@@ -303,8 +303,8 @@ def analyze_ssq(file_path, sheet_name='双色球'):
 
 if __name__ == "__main__":
     # 统一的Excel文件路径
-    input_file = "/Users/chenzhangjie/Downloads/彩票数据（双色球、大乐透）.xlsx"
-    output_file = "/Users/chenzhangjie/Downloads/彩票数据（双色球、大乐透）_分析.xlsx"
+    input_file = "output/彩票数据（双色球、大乐透）.xlsx"
+    output_file = "output/彩票数据（双色球、大乐透）_分析.xlsx"
     
     # 使用ExcelWriter来写入多个sheet到同一个文件
     with pd.ExcelWriter(output_file, engine='openpyxl') as writer:

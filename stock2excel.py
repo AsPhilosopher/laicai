@@ -206,7 +206,11 @@ def export_all_indices_to_excel(output_file: str = None, years: int = 10):
         years: 获取近N年的数据，默认10年
     """
     if output_file is None:
-        output_file = "/Users/chenzhangjie/Downloads/股票指数数据.xlsx"
+        output_file = "output/股票指数数据.xlsx"
+
+    # 确保output文件夹存在
+    output_dir = "output"
+    os.makedirs(output_dir, exist_ok=True)
     
     # 获取日期范围
     start_date, end_date = get_date_range(years)

@@ -1,6 +1,7 @@
 import requests
 import json
 import pandas as pd
+import os
 from typing import List, Dict, Any
 
 
@@ -257,9 +258,14 @@ def export_ssq_to_excel():
     print("正在处理数据...")
     df = process_ssq_data(data)
     
+    # 确保output文件夹存在
+    output_dir = "output"
+    os.makedirs(output_dir, exist_ok=True)
+    
     print("正在保存到Excel...")
-    df.to_excel("/Users/chenzhangjie/Downloads/双色球.xlsx", index=False, engine='openpyxl')
-    print(f"双色球数据已保存到 双色球.xlsx，共 {len(df)} 条记录")
+    excel_path = os.path.join(output_dir, "双色球.xlsx")
+    df.to_excel(excel_path, index=False, engine='openpyxl')
+    print(f"双色球数据已保存到 {excel_path}，共 {len(df)} 条记录")
 
 
 def export_dlt_to_excel():
@@ -275,14 +281,23 @@ def export_dlt_to_excel():
     print("正在处理数据...")
     df = process_dlt_data(data)
     
+    # 确保output文件夹存在
+    output_dir = "output"
+    os.makedirs(output_dir, exist_ok=True)
+    
     print("正在保存到Excel...")
-    df.to_excel("/Users/chenzhangjie/Downloads/大乐透.xlsx", index=False, engine='openpyxl')
-    print(f"大乐透数据已保存到 大乐透.xlsx，共 {len(df)} 条记录")
+    excel_path = os.path.join(output_dir, "大乐透.xlsx")
+    df.to_excel(excel_path, index=False, engine='openpyxl')
+    print(f"大乐透数据已保存到 {excel_path}，共 {len(df)} 条记录")
 
 
 def export_all_to_excel():
     """将双色球和大乐透数据导出到同一个Excel文件的不同sheet中"""
-    excel_path = "/Users/chenzhangjie/Downloads/彩票数据（双色球、大乐透）.xlsx"
+    # 确保output文件夹存在
+    output_dir = "output"
+    os.makedirs(output_dir, exist_ok=True)
+    
+    excel_path = os.path.join(output_dir, "彩票数据（双色球、大乐透）.xlsx")
     
     # 获取并处理双色球数据
     print("正在获取双色球数据...")

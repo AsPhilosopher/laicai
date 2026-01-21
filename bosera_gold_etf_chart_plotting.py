@@ -171,7 +171,7 @@ def plot_bosera_gold_etf_nav(excel_file: str,
 
 
 if __name__ == "__main__":
-    excel_file = "/Users/chenzhangjie/Downloads/博时黄金ETF数据.xlsx"
+    excel_file = "output/博时黄金ETF数据.xlsx"
     sheet_name = 0  # 若有特定 sheet 名称请修改
     years = 10
 

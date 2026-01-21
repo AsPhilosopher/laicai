@@ -638,7 +638,11 @@ def main(n_years=5):
     """
     print(f"开始获取近{n_years}年的黄金(Au99.99)数据...")
 
-    output_path = "/Users/chenzhangjie/Downloads/黄金（Au99.99）.xlsx"
+    # 确保output文件夹存在
+    output_dir = "output"
+    os.makedirs(output_dir, exist_ok=True)
+
+    output_path = "output/黄金（Au99.99）.xlsx"
 
     # 检查文件是否存在
     if os.path.exists(output_path):
