@@ -94,6 +94,26 @@ def _build_html(ssq_rows: List[Dict[str, Any]], dlt_rows: List[Dict[str, Any]]) 
     ssq_json = json.dumps(ssq_rows, ensure_ascii=False)
     dlt_json = json.dumps(dlt_rows, ensure_ascii=False)
 
+    # 分别计算双色球、大乐透的最早 / 最晚开奖日期
+    def _range_of(rows: List[Dict[str, Any]]) -> Tuple[str, str]:
+        dates: List[datetime] = []
+        for row in rows:
+            try:
+                dt = datetime.strptime(row.get("date", ""), "%Y-%m-%d")
+            except (TypeError, ValueError):
+                continue
+            else:
+                dates.append(dt)
+        if dates:
+            return (
+                min(dates).strftime("%Y-%m-%d"),
+                max(dates).strftime("%Y-%m-%d"),
+            )
+        return ("无有效日期", "无有效日期")
+
+    ssq_min_date, ssq_max_date = _range_of(ssq_rows)
+    dlt_min_date, dlt_max_date = _range_of(dlt_rows)
+
     # 默认初始范围：近1年
     init_start = (datetime.now() - timedelta(days=365)).strftime("%Y-%m-%d")
     init_end = datetime.now().strftime("%Y-%m-%d")
@@ -105,6 +125,39 @@ def _build_html(ssq_rows: List[Dict[str, Any]], dlt_rows: List[Dict[str, Any]]) 
   <meta charset="UTF-8" />
   <title>彩票数字统计（双色球 & 大乐透）</title>
   <script src="https://cdn.plot.ly/plotly-2.30.0.min.js"></script>
+  <!-- Plotly 中文语言包与工具栏中文化 -->
+  <script src="https://cdn.plot.ly/plotly-locale-zh-cn-latest.js"></script>
+  <script>
+    (function(){{
+      if (window.Plotly && Plotly.setPlotConfig) {{
+        Plotly.setPlotConfig({{locale: 'zh-cn'}});
+      }}
+    }})();
+  </script>
+  <script>
+    // 修正“下载图片”按钮的 tooltip 为中文
+    (function(){{
+      function patchDownloadTooltip(){{
+        try {{
+          var btn = document.querySelector('.modebar-btn[data-title="Download plot as a png"]')
+            || document.querySelector('.modebar-btn[data-title="Download plot as a PNG"]');
+          if (!btn) return false;
+          var cn = '下载为PNG图片';
+          btn.setAttribute('data-title', cn);
+          btn.setAttribute('title', cn);
+          btn.setAttribute('aria-label', cn);
+          return true;
+        }} catch (e) {{ return false; }}
+      }}
+      var tries = 0;
+      var timer = setInterval(function(){{
+        tries += 1;
+        if (patchDownloadTooltip() || tries >= 60) {{
+          clearInterval(timer);
+        }}
+      }}, 50);
+    }})();
+  </script>
   <style>
     body {{ font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; margin: 20px; }}
     .controls {{ margin-bottom: 12px; display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }}
@@ -121,6 +174,10 @@ def _build_html(ssq_rows: List[Dict[str, Any]], dlt_rows: List[Dict[str, Any]]) 
 </head>
 <body>
   <h1>彩票数字统计（双色球 / 大乐透）</h1>
+  <p style="color:#6b7280;margin:4px 0 12px;">
+    双色球：{ssq_min_date} ～ {ssq_max_date}&nbsp;&nbsp;
+    大乐透：{dlt_min_date} ～ {dlt_max_date}
+  </p>
   <div class="controls">
     <label>开始日期 <input type="date" id="startDate" value="{init_start}"/></label>
     <label>结束日期 <input type="date" id="endDate" value="{init_end}"/></label>

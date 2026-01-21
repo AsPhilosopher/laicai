@@ -1,5 +1,6 @@
 import lottery2excel as lex
 import lottery_numerical_analysis as lna
+import lottery_chart_plotting as lcp
 import au99992excel as auex
 import au9999_chart_plotting as aucp
 import bosera_gold_etf2excel as bgex
@@ -14,6 +15,8 @@ if __name__ == "__main__":
     lex.main()
     # 彩票中奖号码分析
     lna.main()
+    # 彩票中奖号码数字规律可视化
+    lcp.main()
     # 黄金（9999）近10年数据
     auex.main(n_years=10)
     # 生成近10年黄金（9999）图表
