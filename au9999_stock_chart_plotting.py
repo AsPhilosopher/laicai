@@ -2,149 +2,87 @@ import os
 from datetime import datetime, timedelta
 from typing import Optional
 
-import pandas as pd
 import plotly.graph_objects as go
 
-
-def _load_au9999_close(excel_file: str, sheet_name: str = "黄金数据") -> pd.DataFrame:
-    """
-    读取 Au99.99 收盘价序列，输出两列：
-    - 日期: datetime64[ns]
-    - 数值: float (Close 收盘价)
-    """
-    df = pd.read_excel(excel_file, sheet_name=sheet_name, engine="openpyxl")
-
-    date_col = "Date(日期)"
-    value_col = "Close(收盘价)"
-    if date_col not in df.columns:
-        raise ValueError(f"[{sheet_name}] 找不到日期列: {date_col}，当前列: {df.columns.tolist()}")
-    if value_col not in df.columns:
-        raise ValueError(f"[{sheet_name}] 找不到收盘价列: {value_col}，当前列: {df.columns.tolist()}")
-
-    out = pd.DataFrame(
-        {
-            "日期": pd.to_datetime(df[date_col], errors="coerce"),
-            "数值": pd.to_numeric(df[value_col], errors="coerce"),
-        }
-    ).dropna(subset=["日期", "数值"])
-    return out
+from more_stocks_chart_plotting import _load_sheet_series
+from bosera_gold_au9999_chart_plotting import _load_au9999_change
 
 
-def _load_au9999_change(excel_file: str, sheet_name: str = "黄金数据") -> pd.DataFrame:
-    """
-    直接读取 Au99.99 日涨跌幅(%) 序列（不在代码中自行计算），输出两列：
-    - 日期: datetime64[ns]
-    - 数值: float (Up/Down(%)(涨跌(%)))
-    """
-    df = pd.read_excel(excel_file, sheet_name=sheet_name, engine="openpyxl")
-
-    date_col = "Date(日期)"
-    value_col = "Up/Down(%)(涨跌(%))"
-    if date_col not in df.columns:
-        raise ValueError(f"[{sheet_name}] 找不到日期列: {date_col}，当前列: {df.columns.tolist()}")
-    if value_col not in df.columns:
-        raise ValueError(f"[{sheet_name}] 找不到涨跌幅列: {value_col}，当前列: {df.columns.tolist()}")
-
-    raw = df[value_col]
-    if raw.dtype == object:
-        # 兼容 '1.23%' 这类字符串
-        s = raw.astype(str).str.strip().str.replace("%", "", regex=False)
-        change_pct = pd.to_numeric(s, errors="coerce") * 100
-    else:
-        change_pct = pd.to_numeric(raw, errors="coerce") * 100
-
-    out = pd.DataFrame(
-        {
-            "日期": pd.to_datetime(df[date_col], errors="coerce"),
-            "数值": change_pct,
-        }
-    ).dropna(subset=["日期", "数值"])
-    return out
-
-
-def _load_bosera_etf_nav_x70(excel_file: str, sheet_name: str = "Sheet1") -> pd.DataFrame:
-    """
-    读取博时黄金ETF 单位净值(元) 并乘以 70，输出两列：
-    - 日期: datetime64[ns]
-    - 数值: float (单位净值 * 70)
-    """
-    df = pd.read_excel(excel_file, sheet_name=sheet_name, engine="openpyxl")
-
-    date_col = "日期"
-    nav_col = "单位净值(元)"
-    if date_col not in df.columns:
-        raise ValueError(f"[{sheet_name}] 找不到日期列: {date_col}，当前列: {df.columns.tolist()}")
-    if nav_col not in df.columns:
-        raise ValueError(f"[{sheet_name}] 找不到单位净值列: {nav_col}，当前列: {df.columns.tolist()}")
-
-    nav = pd.to_numeric(df[nav_col], errors="coerce") * 70.0
-    out = pd.DataFrame(
-        {
-            "日期": pd.to_datetime(df[date_col], errors="coerce"),
-            "数值": nav,
-        }
-    ).dropna(subset=["日期", "数值"])
-    return out
-
-
-def plot_au9999_vs_bosera_etf(
+def plot_sh_index_vs_au9999(
+    stock_excel: str,
     au9999_excel: str,
-    bosera_etf_excel: str,
+    stock_sheet: str = "上证综合指数",
+    au9999_sheet: str = "黄金数据",
     years: int = 10,
     output_html: Optional[str] = None,
 ):
     """
-    将黄金（Au99.99）收盘价与（博时黄金ETF单位净值*70）绘制到同一个折线图（Plotly），输出 HTML。
+    将上证综合指数收盘价与黄金（Au99.99）收盘价绘制到同一张折线图（Plotly），输出为 HTML 文件。
+
+    参数:
+        stock_excel: 股票指数 Excel 路径（如 output/股票指数数据.xlsx）
+        au9999_excel: 黄金 Au99.99 Excel 路径（如 output/黄金（Au99.99）.xlsx）
+        stock_sheet: 股票指数所在 sheet 名称（默认“上证综合指数”）
+        au9999_sheet: Au99.99 数据所在 sheet 名称（默认“黄金数据”）
+        years: 显示最近 N 年数据
+        output_html: 输出 HTML 文件路径；为 None 时自动生成到 Excel 同目录
     """
     end_date = datetime.now()
     start_date = end_date - timedelta(days=years * 365)
 
-    print(f"正在读取 Au99.99: {au9999_excel}")
-    df_gold = _load_au9999_close(au9999_excel)
+    # 读取上证综合指数“涨跌幅(%)”
+    print(f"正在读取上证综合指数涨跌幅: {stock_excel} (sheet={stock_sheet})")
+    df_stock = _load_sheet_series(stock_excel, stock_sheet, value_type="change")
+    df_stock = df_stock[df_stock["日期"] >= start_date].sort_values("日期")
+
+    # 直接读取 Au99.99 的涨跌幅列：Up/Down(%)(涨跌(%))
+    print(f"正在读取黄金(Au99.99)涨跌幅: {au9999_excel} (sheet={au9999_sheet})")
+    df_gold = _load_au9999_change(au9999_excel, sheet_name=au9999_sheet)
     df_gold = df_gold[df_gold["日期"] >= start_date].sort_values("日期")
 
-    print(f"正在读取 博时黄金ETF: {bosera_etf_excel}")
-    df_etf = _load_bosera_etf_nav_x70(bosera_etf_excel)
-    df_etf = df_etf[df_etf["日期"] >= start_date].sort_values("日期")
-
+    if df_stock.empty:
+        raise ValueError(f"上证综合指数在近{years}年范围内无有效涨跌幅数据，请检查数据/年份范围。")
     if df_gold.empty:
-        raise ValueError(f"Au99.99 在近{years}年范围内无有效数据，请检查数据/年份范围。")
-    if df_etf.empty:
-        raise ValueError(f"博时黄金ETF 在近{years}年范围内无有效数据，请检查数据/年份范围。")
+        raise ValueError(f"黄金(Au99.99)在近{years}年范围内无有效涨跌幅数据，请检查数据/年份范围。")
+
+    # 计算整体日期跨度，用于时间范围选择器
+    min_date = min(df_stock["日期"].min(), df_gold["日期"].min())
+    max_date = max(df_stock["日期"].max(), df_gold["日期"].max())
+    available_years = (max_date - min_date).days / 365.25
 
     fig = go.Figure()
+
+    # 上证综合指数 涨跌幅(%)
+    fig.add_trace(
+        go.Scatter(
+            x=df_stock["日期"],
+            y=df_stock["数值"],
+            mode="lines",
+            name="上证综合指数 涨跌幅(%)",
+            line=dict(color="#1f77b4", width=2.5),
+            hovertemplate="<b>日期</b>: %{x|%Y-%m-%d}<br>"
+            "<b>上证综合指数 涨跌幅</b>: %{y:.2f}%<br>"
+            "<extra></extra>",
+        )
+    )
+
+    # 黄金 Au99.99 涨跌幅(%)
     fig.add_trace(
         go.Scatter(
             x=df_gold["日期"],
             y=df_gold["数值"],
             mode="lines",
-            name="黄金(Au99.99) 收盘价",
+            name="黄金(Au99.99) 涨跌幅(%)",
             line=dict(color="#FFD700", width=2.5),
             hovertemplate="<b>日期</b>: %{x|%Y-%m-%d}<br>"
-            "<b>Au99.99 收盘价</b>: %{y:.2f}<br>"
+            "<b>黄金(Au99.99) 涨跌幅</b>: %{y:.2f}%<br>"
             "<extra></extra>",
         )
     )
-    fig.add_trace(
-        go.Scatter(
-            x=df_etf["日期"],
-            y=df_etf["数值"],
-            mode="lines",
-            name="博时黄金ETF 单位净值×70",
-            line=dict(color="#1f77b4", width=2.5),
-            hovertemplate="<b>日期</b>: %{x|%Y-%m-%d}<br>"
-            "<b>ETF 单位净值×70</b>: %{y:.2f}<br>"
-            "<extra></extra>",
-        )
-    )
-
-    min_date = min(df_gold["日期"].min(), df_etf["日期"].min())
-    max_date = max(df_gold["日期"].max(), df_etf["日期"].max())
-    available_years = (max_date - min_date).days / 365.25
 
     fig.update_layout(
         title={
-            "text": f"黄金(Au99.99) 收盘价 vs 博时黄金ETF(单位净值×70) - 近{years}年",
+            "text": f"上证综合指数 vs 黄金(Au99.99) - 近{years}年涨跌幅走势图",
             "x": 0.5,
             "xanchor": "center",
             "font": {"size": 20, "family": "Arial, sans-serif"},
@@ -172,7 +110,7 @@ def plot_au9999_vs_bosera_etf(
             type="date",
         ),
         yaxis=dict(
-            title=dict(text="价格/净值(×70)", font=dict(size=14)),
+            title=dict(text="涨跌幅(%)", font=dict(size=14)),
             showgrid=True,
             gridcolor="rgba(128, 128, 128, 0.2)",
         ),
@@ -190,17 +128,22 @@ def plot_au9999_vs_bosera_etf(
     )
 
     if output_html is None:
-        out_dir = os.path.dirname(au9999_excel) or os.getcwd()
-        output_html = os.path.join(out_dir, f"黄金Au99.99_博时黄金ETFx70_近{years}年对比走势图.html")
+        # 默认输出到股票 Excel 所在目录
+        out_dir = os.path.dirname(stock_excel) or os.getcwd()
+        output_html = os.path.join(
+            out_dir, f"黄金Au99.99_上证综合指数_近{years}年涨跌幅走势图.html"
+        )
 
     print(f"\n正在生成HTML文件: {output_html}")
     config = {
         "locale": "zh-cn",
         "displayModeBar": True,
         "displaylogo": False,
+        "modeBarButtonsToAdd": [],
+        "modeBarButtonsToRemove": [],
         "toImageButtonOptions": {
             "format": "png",
-            "filename": f"黄金Au99.99_博时黄金ETFx70_近{years}年对比走势图",
+            "filename": f"黄金Au99.99_上证综合指数_近{years}年涨跌幅走势图",
             "height": 700,
             "width": 1400,
             "scale": 1,
@@ -209,6 +152,7 @@ def plot_au9999_vs_bosera_etf(
 
     html_content = fig.to_html(include_plotlyjs="cdn", config=config, full_html=True)
 
+    # 注入 Plotly 中文语言包，并强制全局使用中文，同时修正“下载图片”按钮的英文 tooltip
     zh_locale_inject = (
         "\n<!-- Plotly 中文语言包（用于工具栏提示/按钮文案等） -->\n"
         "<script src=\"https://cdn.plot.ly/plotly-locale-zh-cn-latest.js\"></script>\n"
@@ -234,6 +178,8 @@ def plot_au9999_vs_bosera_etf(
         "        return true;\n"
         "      } catch (e) { return false; }\n"
         "    }\n"
+        "\n"
+        "    // 等待 modebar 渲染出来再替换（最多重试 60 次，大约 3 秒）\n"
         "    var tries = 0;\n"
         "    var timer = setInterval(function(){\n"
         "      tries += 1;\n"
@@ -262,16 +208,28 @@ def plot_au9999_vs_bosera_etf(
     return output_html
 
 
-def main(n_years=5):
-    # 使用相对路径：以当前脚本所在目录为基准定位到项目的 output/ 目录
+def main(n_years: int = 10):
+    """
+    默认从项目根目录下的 output/ 中读取：
+    - 股票指数数据.xlsx（上证综合指数）
+    - 黄金（Au99.99）.xlsx（黄金收盘价）
+    """
     project_dir = os.path.dirname(os.path.abspath(__file__))
     base_dir = os.path.join(project_dir, "output")
-    au9999_excel = os.path.join(base_dir, "黄金（Au99.99）.xlsx")
-    bosera_etf_excel = os.path.join(base_dir, "博时黄金ETF数据.xlsx")
 
-    out = plot_au9999_vs_bosera_etf(au9999_excel, bosera_etf_excel, years=n_years)
+    stock_excel = os.path.join(base_dir, "股票指数数据.xlsx")
+    au9999_excel = os.path.join(base_dir, "黄金（Au99.99）.xlsx")
+
+    out = plot_sh_index_vs_au9999(
+        stock_excel=stock_excel,
+        au9999_excel=au9999_excel,
+        stock_sheet="上证综合指数",
+        au9999_sheet="黄金数据",
+        years=n_years,
+    )
     print(f"\n完成！HTML文件已保存到: {out}")
 
 
 if __name__ == "__main__":
     main(n_years=10)
+

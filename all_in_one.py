@@ -9,6 +9,7 @@ import bosera_gold_au9999_chart_plotting as bgacp
 import stock2excel as sex
 import stock_chart_plotting as scp
 import more_stocks_chart_plotting as mscp
+import au9999_stock_chart_plotting as auscp
 
 if __name__ == "__main__":
     # 获取彩票中奖号码数据
@@ -33,4 +34,5 @@ if __name__ == "__main__":
     scp.main(n_years=10)
     # 生成更多股票图表（收盘价对比、涨跌幅对比）
     mscp.main(n_years=10)
-    
+    # 生成黄金（9999）和上证指数涨跌幅图表
+    auscp.main(n_years=10)
