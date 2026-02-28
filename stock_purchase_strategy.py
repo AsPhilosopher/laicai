@@ -5,9 +5,16 @@ from typing import List, Optional, Tuple
 
 
 EXCEL_PATH = "output/股票指数数据.xlsx"
+# EXCEL_PATH = "output/黄金（Au99.99）.xlsx"
+# 默认 sheet 名设置为“黄金数据”，用于兼容黄金（Au99.99）.xlsx 等单 sheet 文件；
+# 若需要切回股票指数，可将 SHEET_NAME 改为下面注释中的值。
+
+# SHEET_NAME = "黄金数据"
+
+# 例如：
 # SHEET_NAME = "上证综合指数"
-SHEET_NAME = "深证成分指数"
-# SHEET_NAME = "创业板指数"
+# SHEET_NAME = "深证成分指数"
+SHEET_NAME = "创业板指数"
 DATE_COL = "日期Date"
 CLOSE_COL = "收盘Close"
 
@@ -49,17 +56,29 @@ def load_index_data(
     """
     # 先将日期列按字符串读入，再按 YYYYMMDD 解析，避免被错误当成时间戳纳秒
     # 先不强制指定具体列名，统一按字符串读入，方便后续兼容不同表头
-    df = pd.read_excel(
-        excel_path,
-        sheet_name=sheet_name,
-        engine="openpyxl",
-        dtype=str,
-    )
+    # 若指定的 sheet_name 在文件中不存在（例如黄金 Au99.99 文件只有一个 sheet），
+    # 则自动退回读取第一个 sheet，提升兼容性。
+    try:
+        df = pd.read_excel(
+            excel_path,
+            sheet_name=sheet_name,
+            engine="openpyxl",
+            dtype=str,
+        )
+    except ValueError:
+        # 回退为读取第一个 sheet（索引 0）
+        df = pd.read_excel(
+            excel_path,
+            sheet_name=0,
+            engine="openpyxl",
+            dtype=str,
+        )
 
     # 兼容日期列名差异：
     # - 旧表：日期Date，格式形如 20160302
-    # - 新表：日期，格式形如 2016-03-02
-    possible_date_cols = [DATE_COL, "日期"]
+    # - 新表（股票）：日期，格式形如 2016-03-02
+    # - 新表（黄金 Au99.99）：Date 或 Date(日期)
+    possible_date_cols = [DATE_COL, "日期", "Date", "Date(日期)"]
     found_date_col = None
     for col in possible_date_cols:
         if col in df.columns:
@@ -77,7 +96,8 @@ def load_index_data(
     # 兼容不同Sheet中“收盘价”列名差异：
     # - 上证综合指数使用：收盘Close
     # - 深证成分指数、创业板指数使用：收盘价
-    possible_close_cols = [CLOSE_COL, "收盘价"]
+    # - 黄金 Au99.99 使用：Close 或 Close(收盘价)
+    possible_close_cols = [CLOSE_COL, "收盘价", "Close", "Close(收盘价)"]
     found_close_col = None
     for col in possible_close_cols:
         if col in df.columns:
