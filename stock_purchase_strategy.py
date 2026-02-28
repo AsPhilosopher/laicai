@@ -18,6 +18,8 @@ class DailySignal:
     high_threshold: float
     action: str  # "BUY", "SELL", "HOLD"
     reason: str
+    low_threshold_date: Optional[datetime] = None
+    high_threshold_date: Optional[datetime] = None
 
 
 @dataclass
@@ -90,13 +92,18 @@ def compute_thresholds(
     years: int = 5,
     low_percent: float = 30.0,
     high_top_percent: float = 20.0,
-) -> Tuple[float, float, float, pd.DataFrame]:
+) -> Tuple[float, float, float, pd.Timestamp, pd.Timestamp]:
     """
     计算指定日期之前N年内的低位x%和高位y%阈值
 
     low_percent: 底部区间百分比，例如30表示“最低的30%”
     high_top_percent: 最高区间的比例，例如20表示“最高的20%”（即80分位）
-    返回：(当前收盘价, 低位阈值, 高位阈值, 用于计算阈值的窗口数据window_df)
+    返回：
+        - 当前收盘价 current_close
+        - 低位阈值价格（使用最接近分位点的那天实际收盘价）low_threshold
+        - 高位阈值价格（使用最接近分位点的那天实际收盘价）high_threshold
+        - 低位阈值对应日期 low_ref_date
+        - 高位阈值对应日期 high_ref_date
     """
     as_of_ts = pd.to_datetime(as_of_date)
     window_start = as_of_ts - timedelta(days=years * 365)
@@ -107,10 +114,10 @@ def compute_thresholds(
 
     closes = window_df[CLOSE_COL].astype(float)
 
-    # 例如：最低的30% → 30%分位
-    low_threshold = float(closes.quantile(low_percent / 100.0))
+    # 例如：最低的30% → 30%分位（先得到理论分位值，再在真实数据中找最接近的一天）
+    low_q = float(closes.quantile(low_percent / 100.0))
     # 最高的20% → 顶部20% 对应 1 - 0.2 = 0.8 分位
-    high_threshold = float(closes.quantile(1.0 - high_top_percent / 100.0))
+    high_q = float(closes.quantile(1.0 - high_top_percent / 100.0))
 
     # 找到当日收盘价
     today_row = df[df[DATE_COL] == as_of_ts]
@@ -121,15 +128,28 @@ def compute_thresholds(
     # 仅保留与阈值计算相关的列
     window_df = window_df[[DATE_COL, CLOSE_COL]].copy()
 
-    return current_close, low_threshold, high_threshold, window_df
+    # 在窗口数据中找到最接近低位/高位“理论分位值”的真实日期和价格
+    closes_window = window_df[CLOSE_COL].astype(float)
+
+    low_diff = (closes_window - low_q).abs()
+    low_idx = low_diff.idxmin()
+    low_ref_date = window_df.loc[low_idx, DATE_COL]
+    low_threshold = float(window_df.loc[low_idx, CLOSE_COL])
+
+    high_diff = (closes_window - high_q).abs()
+    high_idx = high_diff.idxmin()
+    high_ref_date = window_df.loc[high_idx, DATE_COL]
+    high_threshold = float(window_df.loc[high_idx, CLOSE_COL])
+
+    return current_close, low_threshold, high_threshold, low_ref_date, high_ref_date
 
 
 def get_daily_signal(
     df: pd.DataFrame,
     date_str: str,
     years: int = 5,
-    low_percent: float = 30.0,
-    high_top_percent: float = 20.0,
+    low_percent: float = 40.0,
+    high_top_percent: float = 30.0,
 ) -> DailySignal:
     """
     根据给定日期，计算买入/卖出信号
@@ -141,7 +161,7 @@ def get_daily_signal(
     if trading_date is None:
         raise ValueError("数据中不存在早于该日期的交易日。")
 
-    current_close, low_th, high_th, _ = compute_thresholds(
+    current_close, low_th, high_th, low_ref_date, high_ref_date = compute_thresholds(
         df, trading_date, years=years, low_percent=low_percent, high_top_percent=high_top_percent
     )
 
@@ -162,6 +182,8 @@ def get_daily_signal(
         high_threshold=high_th,
         action=action,
         reason=reason,
+        low_threshold_date=low_ref_date.to_pydatetime(),
+        high_threshold_date=high_ref_date.to_pydatetime(),
     )
 
 
@@ -169,8 +191,8 @@ def backtest_strategy(
     df: pd.DataFrame,
     start_date_str: str,
     years: int = 5,
-    low_percent: float = 30.0,
-    high_top_percent: float = 20.0,
+    low_percent: float = 40.0,
+    high_top_percent: float = 30.0,
     step_drawdown: float = 0.05,
     max_additional_buys: int = 3,
     base_invest: float = 10000.0,
@@ -218,7 +240,7 @@ def backtest_strategy(
 
         # 每天都根据过去N年的数据计算阈值（不使用未来信息）
         try:
-            current_close, low_th, high_th, window_df = compute_thresholds(
+            current_close, low_th, high_th, low_ref_date, high_ref_date = compute_thresholds(
                 df,
                 trade_date,
                 years=years,
@@ -228,19 +250,6 @@ def backtest_strategy(
         except ValueError:
             # 如果窗口内没有足够的数据，跳过该日
             continue
-
-        # 在窗口数据中找到最接近低位/高位阈值的历史日期和价格，用作阈值参考
-        closes_window = window_df[CLOSE_COL].astype(float)
-
-        low_diff = (closes_window - low_th).abs()
-        low_idx = low_diff.idxmin()
-        low_ref_date = window_df.loc[low_idx, DATE_COL]
-        low_ref_price = float(window_df.loc[low_idx, CLOSE_COL])
-
-        high_diff = (closes_window - high_th).abs()
-        high_idx = high_diff.idxmin()
-        high_ref_date = window_df.loc[high_idx, DATE_COL]
-        high_ref_price = float(window_df.loc[high_idx, CLOSE_COL])
 
         # 若当前无持仓，先看是否需要开仓
         if not in_position:
@@ -270,7 +279,7 @@ def backtest_strategy(
                         shares=shares,
                         reason=(
                             "收盘价低于低位阈值"
-                            f"（阈值参考：{low_ref_date.date()}，收盘价{low_ref_price:.2f}），开仓买入"
+                            f"（阈值参考：{low_ref_date.date()}，收盘价{low_th:.2f}），开仓买入"
                         ),
                         low_threshold=low_th,
                     )
@@ -301,7 +310,7 @@ def backtest_strategy(
                     shares=-position_shares,
                     reason=(
                         "收盘价高于高位阈值"
-                        f"（阈值参考：{high_ref_date.date()}，收盘价{high_ref_price:.2f}），清仓卖出"
+                        f"（阈值参考：{high_ref_date.date()}，收盘价{high_th:.2f}），清仓卖出"
                     ),
                     high_threshold=high_th,
                     cycle_return=cycle_return_pct,
@@ -361,8 +370,8 @@ def main():
     date_str = input(f"请输入日期 (YYYY-MM-DD)，默认 {today_str}: ").strip() or today_str
 
     years_str = input("请输入向前回溯的年数（默认5）: ").strip() or "5"
-    low_pct_str = input("请输入低位区间百分比x（默认30，表示最低的30%）: ").strip() or "30"
-    high_top_pct_str = input("请输入高位区间百分比y（默认20，表示最高的20%）: ").strip() or "20"
+    low_pct_str = input("请输入低位区间百分比x（默认40，表示最低的40%）: ").strip() or "40"
+    high_top_pct_str = input("请输入高位区间百分比y（默认30，表示最高的30%）: ").strip() or "30"
 
     years = int(years_str)
     low_pct = float(low_pct_str)
@@ -380,8 +389,21 @@ def main():
     print("\n=== 单日买卖信号 ===")
     print(f"交易日：{daily_signal.trade_date.date()}")
     print(f"收盘价：{daily_signal.close:.2f}")
-    print(f"近{years}年最低的{low_pct:.0f}%阈值价格：{daily_signal.low_threshold:.2f}")
-    print(f"近{years}年最高的{high_top_pct:.0f}%阈值价格：{daily_signal.high_threshold:.2f}")
+    if daily_signal.low_threshold_date is not None:
+        print(
+            f"近{years}年最低的{low_pct:.0f}%阈值价格：{daily_signal.low_threshold:.2f}"
+            f"（阈值参考日期：{daily_signal.low_threshold_date.date()}）"
+        )
+    else:
+        print(f"近{years}年最低的{low_pct:.0f}%阈值价格：{daily_signal.low_threshold:.2f}")
+
+    if daily_signal.high_threshold_date is not None:
+        print(
+            f"近{years}年最高的{high_top_pct:.0f}%阈值价格：{daily_signal.high_threshold:.2f}"
+            f"（阈值参考日期：{daily_signal.high_threshold_date.date()}）"
+        )
+    else:
+        print(f"近{years}年最高的{high_top_pct:.0f}%阈值价格：{daily_signal.high_threshold:.2f}")
     print(f"信号：{daily_signal.action}（{daily_signal.reason}）")
 
     # 回测收益
@@ -393,6 +415,22 @@ def main():
         low_percent=low_pct,
         high_top_percent=high_top_pct,
     )
+
+    # 总周期天数：按“最后一次卖出日期 - 第一次买入日期 + 1天”计算
+    first_buy_date = None
+    last_sell_date = None
+    for t in trades:
+        if t.action in ("BUY", "BUY_ADD"):
+            if first_buy_date is None or t.date < first_buy_date:
+                first_buy_date = t.date
+        if t.action == "SELL":
+            if last_sell_date is None or t.date > last_sell_date:
+                last_sell_date = t.date
+
+    if first_buy_date is not None and last_sell_date is not None:
+        total_cycle_days = (last_sell_date - first_buy_date).days + 1
+    else:
+        total_cycle_days = 0
 
     for t in trades:
         output_line = (
@@ -407,7 +445,10 @@ def main():
                 output_line += f" | 周期天数：{t.cycle_days}天"
         print(output_line)
 
-    print(f"\n策略总收益率：{total_return:.2f}%（初始资金按 {10000.0 * (1 + 3):.0f} 元计算）")
+    print(
+        f"\n策略总收益率：{total_return:.2f}%"
+        f"（初始资金按 {10000.0 * (1 + 3):.0f} 元计算，总周期天数：{total_cycle_days}天）"
+    )
 
 
 if __name__ == "__main__":
