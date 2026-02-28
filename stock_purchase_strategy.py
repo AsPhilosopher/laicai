@@ -5,7 +5,9 @@ from typing import List, Optional, Tuple
 
 
 EXCEL_PATH = "output/股票指数数据.xlsx"
-SHEET_NAME = "上证综合指数"
+# SHEET_NAME = "上证综合指数"
+SHEET_NAME = "深证成分指数"
+# SHEET_NAME = "创业板指数"
 DATE_COL = "日期Date"
 CLOSE_COL = "收盘Close"
 
@@ -46,17 +48,73 @@ def load_index_data(
     必含列：日期Date(形如20160302)、收盘Close
     """
     # 先将日期列按字符串读入，再按 YYYYMMDD 解析，避免被错误当成时间戳纳秒
+    # 先不强制指定具体列名，统一按字符串读入，方便后续兼容不同表头
     df = pd.read_excel(
         excel_path,
         sheet_name=sheet_name,
         engine="openpyxl",
-        dtype={DATE_COL: str},
+        dtype=str,
     )
-    if DATE_COL not in df.columns or CLOSE_COL not in df.columns:
-        raise ValueError(f"Excel中未找到必须列：{DATE_COL} / {CLOSE_COL}")
+
+    # 兼容日期列名差异：
+    # - 旧表：日期Date，格式形如 20160302
+    # - 新表：日期，格式形如 2016-03-02
+    possible_date_cols = [DATE_COL, "日期"]
+    found_date_col = None
+    for col in possible_date_cols:
+        if col in df.columns:
+            found_date_col = col
+            break
+    if found_date_col is None:
+        raise ValueError(
+            f"Excel中未找到日期列，已支持的列名包括：{', '.join(possible_date_cols)}"
+        )
+
+    # 将实际存在的日期列统一重命名为 DATE_COL
+    if found_date_col != DATE_COL:
+        df = df.rename(columns={found_date_col: DATE_COL})
+
+    # 兼容不同Sheet中“收盘价”列名差异：
+    # - 上证综合指数使用：收盘Close
+    # - 深证成分指数、创业板指数使用：收盘价
+    possible_close_cols = [CLOSE_COL, "收盘价"]
+    found_close_col = None
+    for col in possible_close_cols:
+        if col in df.columns:
+            found_close_col = col
+            break
+    if found_close_col is None:
+        raise ValueError(
+            f"Excel中未找到收盘价列，已支持的列名包括：{', '.join(possible_close_cols)}"
+        )
+
+    # 将实际存在的收盘价列统一重命名为 CLOSE_COL，方便后续逻辑统一处理
+    if found_close_col != CLOSE_COL:
+        df = df.rename(columns={found_close_col: CLOSE_COL})
 
     df = df.copy()
-    df[DATE_COL] = pd.to_datetime(df[DATE_COL], format="%Y%m%d")
+
+    # 统一解析日期，兼容 "YYYYMMDD" 和 "YYYY-MM-DD" 两种字符串格式
+    date_series = df[DATE_COL].astype(str)
+    # 先尝试旧格式 YYYYMMDD
+    parsed_dates = pd.to_datetime(date_series, format="%Y%m%d", errors="coerce")
+    # 对于未能解析的，再尝试新格式 YYYY-MM-DD
+    mask_na = parsed_dates.isna()
+    if mask_na.any():
+        parsed_dates2 = pd.to_datetime(
+            date_series[mask_na], format="%Y-%m-%d", errors="coerce"
+        )
+        parsed_dates.loc[mask_na] = parsed_dates2
+
+    # 对于仍然无法解析的日期行，视为异常数据，直接丢弃
+    invalid_mask = parsed_dates.isna()
+    if invalid_mask.any():
+        # 只保留日期有效的行
+        valid_mask = ~invalid_mask
+        df = df.loc[valid_mask].reset_index(drop=True)
+        parsed_dates = parsed_dates.loc[valid_mask].reset_index(drop=True)
+
+    df[DATE_COL] = parsed_dates
     df = df.sort_values(DATE_COL).reset_index(drop=True)
 
     return df
@@ -365,6 +423,7 @@ def main():
     # 读取数据
     df = load_index_data()
 
+    print(f"Sheet名称: {SHEET_NAME}")
     # 交互输入
     today_str = datetime.now().strftime("%Y-%m-%d")
     date_str = input(f"请输入日期 (YYYY-MM-DD)，默认 {today_str}: ").strip() or today_str
@@ -431,23 +490,25 @@ def main():
         total_cycle_days = (last_sell_date - first_buy_date).days + 1
     else:
         total_cycle_days = 0
+    total_cycle_years = total_cycle_days / 365.0 if total_cycle_days > 0 else 0.0
 
     for t in trades:
         output_line = (
             f"[周期{t.cycle_id}] {t.date.date()} {t.action:7s} "
             f"价：{t.price:8.2f} 金额：{t.amount:10.2f} 股数：{t.shares:10.4f} 原因：{t.reason}"
         )
-        # 如果是卖出操作，显示周期收益率和周期天数
+        # 如果是卖出操作，显示周期收益率和周期天数（兼容换算为多少年）
         if t.action == "SELL":
             if t.cycle_return is not None:
                 output_line += f" | 周期收益率：{t.cycle_return:.2f}%"
             if t.cycle_days is not None:
-                output_line += f" | 周期天数：{t.cycle_days}天"
+                years_span = t.cycle_days / 365.0
+                output_line += f" | 周期天数：{t.cycle_days}天（约{years_span:.2f}年）"
         print(output_line)
 
     print(
         f"\n策略总收益率：{total_return:.2f}%"
-        f"（初始资金按 {10000.0 * (1 + 3):.0f} 元计算，总周期天数：{total_cycle_days}天）"
+        f"（初始资金按 {10000.0 * (1 + 3):.0f} 元计算，总周期天数：{total_cycle_days}天（约{total_cycle_years:.2f}年））"
     )
 
 
