@@ -140,6 +140,34 @@ def _score_numbers_by_freq_and_mean(
     return [n for n, _ in scored]
 
 
+def _select_extreme_by_freq_deviation(
+    numbers: List[int],
+    possible_range: range,
+    top_k: int,
+) -> List[int]:
+    """
+    按“出现频次相对各号码平均频次的偏离程度”选出 top_k 个号码。
+    偏离程度 = |freq(num) - avg_freq(所有号码)|
+    """
+    counter = Counter(numbers)
+    freqs = []
+    for n in possible_range:
+        freqs.append(counter.get(n, 0))
+    if not freqs:
+        return []
+    avg_freq = float(np.mean(freqs))
+
+    scored: List[Tuple[int, float, int]] = []
+    for n in possible_range:
+        f = counter.get(n, 0)
+        dev = abs(f - avg_freq)
+        # 先按偏离程度降序，再按频次本身降序，最后按号码升序
+        scored.append((n, dev, f))
+
+    scored.sort(key=lambda x: (-x[1], -x[2], x[0]))
+    return [n for n, _, _ in scored[:top_k]]
+
+
 def _make_groups_from_pool(
     sorted_pool: List[int],
     group_size: int,
@@ -201,9 +229,60 @@ def select_best_ssq_combinations(
 def select_best_ssq_single(records: List[SsqRecord]) -> Dict[str, Any]:
     """
     在给定历史记录上生成“单个”最佳双色球号码组合。
+    策略：
+    - 先选出 1 个蓝球：它的出现频次对“所有蓝球平均频次”的偏离程度最大；
+    - 再选出 4 个红球：它们的出现频次对“所有红球平均频次”的偏离程度最大；
+    - 剩余 2 个红球：在未被选中的号码中搜索，使得整注 7 个号码
+      （6 个红球 + 1 个蓝球）的平均值尽量靠近“历史所有号码（红+蓝）的整体平均值”。
     """
-    combos = select_best_ssq_combinations(records, max_combinations=1)
-    return combos[0] if combos else {}
+    if not records:
+        return {}
+
+    all_reds: List[int] = []
+    all_blues: List[int] = []
+    for r in records:
+        all_reds.extend(r.reds)
+        all_blues.extend(r.blues)
+
+    if not all_reds or not all_blues:
+        return {}
+
+    # 先选蓝球：频次对平均频次的偏离最大
+    blue_range = range(1, 16 + 1)
+    extreme_blues = _select_extreme_by_freq_deviation(all_blues, blue_range, top_k=1)
+    if not extreme_blues:
+        return {}
+    blue = extreme_blues[0]
+
+    # 红球：先选出 4 个“频次偏离平均值最大”的号码
+    red_range = range(1, 33 + 1)
+    base_reds = _select_extreme_by_freq_deviation(all_reds, red_range, top_k=4)
+    if len(base_reds) < 4:
+        return {}
+
+    # 目标整体平均值：用历史所有号码（红+蓝）的整体平均值
+    all_nums = all_reds + all_blues
+    target_all_mean = float(np.mean(all_nums))
+
+    # 剩余红球候选
+    remaining_reds = [n for n in red_range if n not in base_reds]
+
+    best_pair: Tuple[int, int] = (0, 0)
+    best_diff = float("inf")
+    # 暴力搜索两两组合，使得 7 个号码（6 红 + 1 蓝）的平均值尽量靠近 target_all_mean
+    for i in range(len(remaining_reds)):
+        for j in range(i + 1, len(remaining_reds)):
+            candidate_reds = base_reds + [remaining_reds[i], remaining_reds[j]]
+            candidate_all = candidate_reds + [blue]
+            mean_val = float(np.mean(candidate_all))
+            diff = abs(mean_val - target_all_mean)
+            if diff < best_diff:
+                best_diff = diff
+                best_pair = (remaining_reds[i], remaining_reds[j])
+
+    final_reds = sorted(base_reds + list(best_pair))
+
+    return {"reds": final_reds, "blue": blue}
 
 
 def select_best_dlt_combinations(
@@ -246,9 +325,60 @@ def select_best_dlt_combinations(
 def select_best_dlt_single(records: List[DltRecord]) -> Dict[str, Any]:
     """
     在给定历史记录上生成“单个”最佳大乐透号码组合。
+    策略：
+    - 先选出 2 个后区号码：它们的出现频次对“所有后区平均频次”的偏离程度最大；
+    - 再选出 4 个前区号码：它们的出现频次对“所有前区平均频次”的偏离程度最大；
+    - 剩余 1 个前区号码：在未被选中的号码中搜索，使得整注 7 个号码
+      （5 个前区 + 2 个后区）的平均值尽量靠近“历史所有号码（前区+后区）的整体平均值”。
     """
-    combos = select_best_dlt_combinations(records, max_combinations=1)
-    return combos[0] if combos else {}
+    if not records:
+        return {}
+
+    all_fronts: List[int] = []
+    all_backs: List[int] = []
+    for r in records:
+        all_fronts.extend(r.fronts)
+        all_backs.extend(r.backs)
+
+    if not all_fronts or not all_backs:
+        return {}
+
+    # 后区：先选 2 个“频次偏离平均值最大”的号码
+    back_range = range(1, 12 + 1)
+    extreme_backs = _select_extreme_by_freq_deviation(all_backs, back_range, top_k=2)
+    if len(extreme_backs) < 2:
+        return {}
+    final_backs = sorted(extreme_backs[:2])
+
+    # 前区：先选 4 个“频次偏离平均值最大”的号码
+    front_range = range(1, 35 + 1)
+    base_fronts = _select_extreme_by_freq_deviation(all_fronts, front_range, top_k=4)
+    if len(base_fronts) < 4:
+        return {}
+
+    # 目标整体平均值：用历史所有号码（前区+后区）的整体平均值
+    all_nums = all_fronts + all_backs
+    target_all_mean = float(np.mean(all_nums))
+
+    remaining_fronts = [n for n in front_range if n not in base_fronts]
+
+    best_extra_front = None
+    best_diff = float("inf")
+    for n in remaining_fronts:
+        candidate_fronts = base_fronts + [n]
+        candidate_all = candidate_fronts + final_backs
+        mean_val = float(np.mean(candidate_all))
+        diff = abs(mean_val - target_all_mean)
+        if diff < best_diff:
+            best_diff = diff
+            best_extra_front = n
+
+    if best_extra_front is None:
+        return {}
+
+    final_fronts = sorted(base_fronts + [best_extra_front])
+
+    return {"fronts": final_fronts, "backs": final_backs}
 
 
 def _filter_recent_records(
