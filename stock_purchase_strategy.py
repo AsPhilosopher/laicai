@@ -15,6 +15,14 @@ EXCEL_PATH = "output/股票指数数据.xlsx"
 # SHEET_NAME = "上证综合指数"
 # SHEET_NAME = "深证成分指数"
 SHEET_NAME = "创业板指数"
+
+# SHEET_NAME = "沪深300指数"
+# SHEET_NAME = "上证50指数"
+# SHEET_NAME = "中证小盘500指数"
+# SHEET_NAME = "中证1000指数"
+# SHEET_NAME = "上证科创板综合指数"
+
+
 DATE_COL = "日期Date"
 CLOSE_COL = "收盘Close"
 
