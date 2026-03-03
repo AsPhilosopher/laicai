@@ -29,10 +29,10 @@ if __name__ == "__main__":
     # 生成博时黄金和黄金（9999）走势对比数据
     bgacp.main(n_years=10)
     # 获取股票数据
-    sex.main(n_years=10)
+    sex.main(n_years=25)
     # 生成股票图表
-    scp.main(n_years=10)
+    scp.main(n_years=25)
     # 生成更多股票图表（收盘价对比、涨跌幅对比）
-    mscp.main(n_years=10)
+    mscp.main(n_years=25)
     # 生成黄金（9999）和上证指数涨跌幅图表
     auscp.main(n_years=10)
