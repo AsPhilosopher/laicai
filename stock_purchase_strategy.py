@@ -235,7 +235,7 @@ def get_daily_signal(
     date_str: str,
     years: int = 10,
     low_percent: float = 40.0,
-    high_top_percent: float = 10.0,
+    high_top_percent: float = 3.0,
 ) -> DailySignal:
     """
     根据给定日期，计算买入/卖出信号
@@ -278,7 +278,7 @@ def backtest_strategy(
     start_date_str: str,
     years: int = 10,
     low_percent: float = 40.0,
-    high_top_percent: float = 10.0,
+    high_top_percent: float = 3.0,
     step_drawdown: float = 0.05,
     max_additional_buys: int = 3,
     base_invest: float = 10000.0,
@@ -458,7 +458,7 @@ def main():
 
     years_str = input("请输入向前回溯的年数（默认10）: ").strip() or "10"
     low_pct_str = input("请输入低位区间百分比x（默认40，表示最低的40%）: ").strip() or "40"
-    high_top_pct_str = input("请输入高位区间百分比y（默认10，表示最高的10%）: ").strip() or "10"
+    high_top_pct_str = input("请输入高位区间百分比y（默认3，表示最高的3%）: ").strip() or "3"
 
     years = int(years_str)
     low_pct = float(low_pct_str)
