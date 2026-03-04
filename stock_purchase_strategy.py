@@ -503,25 +503,41 @@ def main():
         high_top_percent=high_top_pct,
     )
 
-    # 总周期天数：按“最后一次卖出日期 - 第一次买入日期 + 1天”计算
-    first_buy_date = None
-    last_sell_date = None
+    # 总周期天数：
+    # - 若最后一个周期已经卖出：使用“最后一次卖出日期 - 第一次买入日期 + 1天”
+    # - 若最后一个周期尚未卖出：使用“数据最后交易日 - 第一次买入日期 + 1天”
+    first_buy_date: Optional[datetime] = None
+    last_sell_date: Optional[datetime] = None
+    max_cycle_id: Optional[int] = None
     for t in trades:
+        # 记录第一笔买入（或加仓）日期
         if t.action in ("BUY", "BUY_ADD"):
             if first_buy_date is None or t.date < first_buy_date:
                 first_buy_date = t.date
+        # 记录最后一次卖出日期
         if t.action == "SELL":
             if last_sell_date is None or t.date > last_sell_date:
                 last_sell_date = t.date
+        # 记录最大的周期编号（用于判断最后一个周期是否已平仓）
+        if max_cycle_id is None or t.cycle_id > max_cycle_id:
+            max_cycle_id = t.cycle_id
+
+    # 判断最后一个周期是否已经有卖出记录
+    last_cycle_has_sell = False
+    if max_cycle_id is not None:
+        for t in trades:
+            if t.cycle_id == max_cycle_id and t.action == "SELL":
+                last_cycle_has_sell = True
+                break
 
     if first_buy_date is not None:
-        # 若存在卖出记录，则按“最后一次卖出日期 - 第一次买入日期 + 1天”计算
-        if last_sell_date is not None:
-            total_cycle_days = (last_sell_date - first_buy_date).days + 1
+        if last_cycle_has_sell and last_sell_date is not None:
+            # 所有周期都已平仓：以最后一次卖出日期为结束
+            end_date_for_total = last_sell_date
         else:
-            # 若只有一个未平仓周期（从未卖出），则按“数据最后交易日 - 第一次买入日期 + 1天”计算
-            last_data_date = df[DATE_COL].max().to_pydatetime()
-            total_cycle_days = (last_data_date - first_buy_date).days + 1
+            # 存在未平仓的最后一个周期：以数据的最后一个交易日为结束
+            end_date_for_total = df[DATE_COL].max().to_pydatetime()
+        total_cycle_days = (end_date_for_total - first_buy_date).days + 1
     else:
         total_cycle_days = 0
     total_cycle_years = total_cycle_days / 365.0 if total_cycle_days > 0 else 0.0
