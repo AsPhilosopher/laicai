@@ -233,9 +233,9 @@ def compute_thresholds(
 def get_daily_signal(
     df: pd.DataFrame,
     date_str: str,
-    years: int = 5,
+    years: int = 10,
     low_percent: float = 40.0,
-    high_top_percent: float = 30.0,
+    high_top_percent: float = 10.0,
 ) -> DailySignal:
     """
     根据给定日期，计算买入/卖出信号
@@ -276,9 +276,9 @@ def get_daily_signal(
 def backtest_strategy(
     df: pd.DataFrame,
     start_date_str: str,
-    years: int = 5,
+    years: int = 10,
     low_percent: float = 40.0,
-    high_top_percent: float = 30.0,
+    high_top_percent: float = 10.0,
     step_drawdown: float = 0.05,
     max_additional_buys: int = 3,
     base_invest: float = 10000.0,
@@ -456,9 +456,9 @@ def main():
     today_str = datetime.now().strftime("%Y-%m-%d")
     date_str = input(f"请输入日期 (YYYY-MM-DD)，默认 {today_str}: ").strip() or today_str
 
-    years_str = input("请输入向前回溯的年数（默认5）: ").strip() or "5"
+    years_str = input("请输入向前回溯的年数（默认10）: ").strip() or "10"
     low_pct_str = input("请输入低位区间百分比x（默认40，表示最低的40%）: ").strip() or "40"
-    high_top_pct_str = input("请输入高位区间百分比y（默认30，表示最高的30%）: ").strip() or "30"
+    high_top_pct_str = input("请输入高位区间百分比y（默认10，表示最高的10%）: ").strip() or "10"
 
     years = int(years_str)
     low_pct = float(low_pct_str)
@@ -514,8 +514,14 @@ def main():
             if last_sell_date is None or t.date > last_sell_date:
                 last_sell_date = t.date
 
-    if first_buy_date is not None and last_sell_date is not None:
-        total_cycle_days = (last_sell_date - first_buy_date).days + 1
+    if first_buy_date is not None:
+        # 若存在卖出记录，则按“最后一次卖出日期 - 第一次买入日期 + 1天”计算
+        if last_sell_date is not None:
+            total_cycle_days = (last_sell_date - first_buy_date).days + 1
+        else:
+            # 若只有一个未平仓周期（从未卖出），则按“数据最后交易日 - 第一次买入日期 + 1天”计算
+            last_data_date = df[DATE_COL].max().to_pydatetime()
+            total_cycle_days = (last_data_date - first_buy_date).days + 1
     else:
         total_cycle_days = 0
     total_cycle_years = total_cycle_days / 365.0 if total_cycle_days > 0 else 0.0
