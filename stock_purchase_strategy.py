@@ -280,7 +280,8 @@ def backtest_strategy(
     low_percent: float = 40.0,
     high_top_percent: float = 3.0,
     step_drawdown: float = 0.05,
-    max_additional_buys: int = 3,
+    max_additional_buys: int = 5,
+    m_months: int = 3,
     base_invest: float = 10000.0,
 ) -> Tuple[float, List[TradeRecord]]:
     """
@@ -290,6 +291,8 @@ def backtest_strategy(
     - 价格 < 低位阈值 → 开仓买入 base_invest
     - 持仓后，如价格相对上次买入价每再跌 step_drawdown（默认5%），
       且加仓次数未超过 max_additional_buys，则再买入 base_invest
+    - 持仓后，距离上次买入已满 m_months 个月，且当前价格仍低于近N年的低位x%阈值，
+      也可以加仓一次（与上述跌幅加仓共用同一加仓计数，总加仓次数不超过 max_additional_buys）
     - 价格 > 高位阈值 → 清仓卖出
     - 每次清仓后才允许下一次重新按规则买入
     """
@@ -310,6 +313,7 @@ def backtest_strategy(
     position_shares = 0.0
     in_position = False
     last_buy_price: Optional[float] = None
+    last_buy_date: Optional[pd.Timestamp] = None
     cycle_id = 0
     add_count = 0
     cycle_total_cost: float = 0.0  # 当前周期的总买入成本
@@ -351,6 +355,7 @@ def backtest_strategy(
                 in_position = True
                 cycle_id += 1
                 last_buy_price = price
+                last_buy_date = trade_date
                 add_count = 0
                 cycle_total_cost = base_invest  # 初始化周期总成本
                 cycle_start_date = trade_date  # 记录本周期开始日期
@@ -408,22 +413,30 @@ def backtest_strategy(
             position_shares = 0.0
             in_position = False
             last_buy_price = None
+            last_buy_date = None
             add_count = 0
             cycle_total_cost = 0.0
             cycle_start_date = None
             continue
 
         # 未触及卖出条件 → 考虑是否加仓
-        if (
+        can_add_more = (
             add_count < max_additional_buys
+            and cash >= base_invest
             and last_buy_price is not None
-            and price <= last_buy_price * (1.0 - step_drawdown)
-        ):
-            if cash >= base_invest:
+            and last_buy_date is not None
+        )
+
+        if can_add_more:
+            did_add = False
+
+            # 规则1：相对上次买入价每再跌 step_drawdown 即加仓
+            if price <= last_buy_price * (1.0 - step_drawdown):
                 shares = base_invest / price
                 cash -= base_invest
                 position_shares += shares
                 last_buy_price = price
+                last_buy_date = trade_date
                 add_count += 1
                 cycle_total_cost += base_invest  # 累加周期总成本
 
@@ -438,6 +451,35 @@ def backtest_strategy(
                         reason=f"相对上次买入价下跌{step_drawdown*100:.1f}%，第{add_count}次加仓",
                     )
                 )
+                did_add = True
+
+            # 规则2：距离上次买入已满 m_months 个月，且价格仍低于低位x%阈值 → 也可加仓
+            # 若当天已因规则1加仓，则不再重复加仓
+            if (not did_add) and (m_months > 0):
+                next_add_date = last_buy_date + pd.DateOffset(months=m_months)
+                if trade_date >= next_add_date and price < low_th:
+                    shares = base_invest / price
+                    cash -= base_invest
+                    position_shares += shares
+                    last_buy_price = price
+                    last_buy_date = trade_date
+                    add_count += 1
+                    cycle_total_cost += base_invest
+
+                    trades.append(
+                        TradeRecord(
+                            cycle_id=cycle_id,
+                            date=trade_date.to_pydatetime(),
+                            action="BUY_ADD",
+                            price=price,
+                            amount=base_invest,
+                            shares=shares,
+                            reason=(
+                                f"距离上次买入已满{m_months}个月，且价格低于低位阈值，"
+                                f"第{add_count}次加仓"
+                            ),
+                        )
+                    )
 
     # 回测结束时的总资产（若仍有持仓，按最后收盘价市值计算）
     final_price = float(df[df[DATE_COL] == end_date].iloc[0][CLOSE_COL])
@@ -459,10 +501,12 @@ def main():
     years_str = input("请输入向前回溯的年数（默认10）: ").strip() or "10"
     low_pct_str = input("请输入低位区间百分比x（默认40，表示最低的40%）: ").strip() or "40"
     high_top_pct_str = input("请输入高位区间百分比y（默认3，表示最高的3%）: ").strip() or "3"
+    m_months_str = input("请输入满月加仓间隔m（单位：月，默认3）: ").strip() or "3"
 
     years = int(years_str)
     low_pct = float(low_pct_str)
     high_top_pct = float(high_top_pct_str)
+    m_months = int(m_months_str)
 
     # 单日信号
     daily_signal = get_daily_signal(
@@ -495,12 +539,16 @@ def main():
 
     # 回测收益
     print("\n=== 回测结果（从该日期至最近数据日期） ===")
+    max_additional_buys = 5  # 总加仓次数上限（不含首笔建仓），与 backtest_strategy 默认值保持一致
+
     total_return, trades = backtest_strategy(
         df,
         start_date_str=date_str,
         years=years,
         low_percent=low_pct,
         high_top_percent=high_top_pct,
+        max_additional_buys=max_additional_buys,
+        m_months=m_months,
     )
 
     # 总周期天数：
@@ -556,9 +604,10 @@ def main():
                 output_line += f" | 周期天数：{t.cycle_days}天（约{years_span:.2f}年）"
         print(output_line)
 
+    initial_capital_print = 10000.0 * (1 + max_additional_buys)
     print(
         f"\n策略总收益率：{total_return:.2f}%"
-        f"（初始资金按 {10000.0 * (1 + 3):.0f} 元计算，总周期天数：{total_cycle_days}天（约{total_cycle_years:.2f}年））"
+        f"（初始资金按 {initial_capital_print:.0f} 元计算，总周期天数：{total_cycle_days}天（约{total_cycle_years:.2f}年））"
     )
 
 
