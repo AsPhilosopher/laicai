@@ -230,6 +230,78 @@ def compute_thresholds(
     return current_close, low_threshold, high_threshold, low_ref_date, high_ref_date
 
 
+def compute_percentile_rank(
+    df: pd.DataFrame,
+    as_of_date: datetime,
+    years: int = 5,
+) -> Tuple[float, float, int]:
+    """
+    计算指定日期的收盘价在过去 N 年收盘价数据中的百分位排名
+    
+    参数:
+        df: 包含日期和收盘价的数据框
+        as_of_date: 指定的日期
+        years: 向前回溯的年数
+        
+    返回:
+        - percentile_rank: 百分位排名 (0-100)，如 75.5 表示高于 75.5% 的数据
+        - current_close: 当前收盘价
+        - window_size: 窗口内的数据点数
+        
+    说明:
+        - 如果收盘价高于 N 年内所有价格，返回 >100
+        - 如果收盘价低于 N 年内所有价格，返回 <0
+        - 否则返回 0-100 之间的值，表示超过百分之多少的数据
+    """
+    as_of_ts = pd.to_datetime(as_of_date)
+    window_start = as_of_ts - timedelta(days=years * 365)
+    
+    # 获取时间窗口内的数据
+    window_df = df[(df[DATE_COL] >= window_start) & (df[DATE_COL] <= as_of_ts)]
+    
+    if window_df.empty:
+        raise ValueError("所选时间窗口内没有历史数据，无法计算百分位排名。")
+    
+    closes = window_df[CLOSE_COL].astype(float)
+    window_size = len(closes)
+    
+    # 获取当日收盘价
+    today_row = df[df[DATE_COL] == as_of_ts]
+    if today_row.empty:
+        # 如果指定日期不是交易日，尝试向前找最近的交易日
+        trading_date = get_nearest_trading_date(df, as_of_date, direction="backward")
+        if trading_date is None:
+            raise ValueError("数据中不存在早于该日期的交易日。")
+        today_row = df[df[DATE_COL] == trading_date]
+        if today_row.empty:
+            raise ValueError("无法找到对应的交易日数据。")
+    
+    current_close = float(today_row.iloc[0][CLOSE_COL])
+    
+    # 计算百分位排名
+    # 方法：统计有多少比例的数据小于当前价格
+    below_count = (closes < current_close).sum()
+    equal_count = (closes == current_close).sum()
+    
+    # 使用线性插值法计算百分位排名
+    # percentile_rank = (小于当前值的数量 + 0.5 * 等于当前值的数量) / 总数量 * 100
+    percentile_rank = (below_count + 0.5 * equal_count) / window_size * 100
+    
+    # 处理边界情况
+    if current_close > closes.max():
+        # 高于最大值，计算超出比例
+        max_close = closes.max()
+        excess_pct = (current_close - max_close) / max_close * 100
+        percentile_rank = 100.0 + excess_pct
+    elif current_close < closes.min():
+        # 低于最小值，计算低于比例
+        min_close = closes.min()
+        deficit_pct = (min_close - current_close) / min_close * 100
+        percentile_rank = 0.0 - deficit_pct
+    
+    return percentile_rank, current_close, window_size
+
+
 def get_daily_signal(
     df: pd.DataFrame,
     date_str: str,
@@ -489,6 +561,50 @@ def backtest_strategy(
     return total_return, trades
 
 
+def get_percentile_position(
+    df: pd.DataFrame,
+    date_str: str,
+    years: int = 5,
+) -> dict:
+    """
+    获取指定日期的收盘价百分位位置信息
+    
+    返回字典包含:
+        - date: 交易日期
+        - close: 收盘价
+        - percentile_rank: 百分位排名
+        - years: 回溯年数
+        - description: 描述性文字
+    """
+    target_date = datetime.strptime(date_str, "%Y-%m-%d")
+    
+    # 将输入日期对齐到最近的向前交易日
+    trading_date = get_nearest_trading_date(df, target_date, direction="backward")
+    if trading_date is None:
+        raise ValueError("数据中不存在早于该日期的交易日。")
+    
+    percentile_rank, current_close, window_size = compute_percentile_rank(
+        df, trading_date, years=years
+    )
+    
+    # 生成描述性文字
+    if percentile_rank > 100:
+        description = f"收盘价高于近{years}年所有价格，超出{(percentile_rank-100):.1f}%"
+    elif percentile_rank < 0:
+        description = f"收盘价低于近{years}年所有价格，低于{abs(percentile_rank):.1f}%"
+    else:
+        description = f"收盘价高于近{years}年{percentile_rank:.1f}%的价格水平"
+    
+    return {
+        "date": trading_date.to_pydatetime(),
+        "close": current_close,
+        "percentile_rank": percentile_rank,
+        "years": years,
+        "window_size": window_size,
+        "description": description,
+    }
+
+
 def main():
     # 读取数据
     df = load_index_data()
@@ -517,6 +633,13 @@ def main():
         high_top_percent=high_top_pct,
     )
 
+    # 计算百分位位置
+    percentile_info = get_percentile_position(
+        df,
+        date_str=date_str,
+        years=years,
+    )
+
     print("\n=== 单日买卖信号 ===")
     print(f"交易日：{daily_signal.trade_date.date()}")
     print(f"收盘价：{daily_signal.close:.2f}")
@@ -536,6 +659,13 @@ def main():
     else:
         print(f"近{years}年最高的{high_top_pct:.0f}%阈值价格：{daily_signal.high_threshold:.2f}")
     print(f"信号：{daily_signal.action}（{daily_signal.reason}）")
+
+    print("\n=== 百分位排名 ===")
+    print(f"交易日：{percentile_info['date'].date()}")
+    print(f"收盘价：{percentile_info['close']:.2f}")
+    print(f"样本数量：{percentile_info['window_size']}个交易日")
+    print(f"百分位排名：{percentile_info['percentile_rank']:.1f}%")
+    print(f"说明：{percentile_info['description']}")
 
     # 回测收益
     print("\n=== 回测结果（从该日期至最近数据日期） ===")
