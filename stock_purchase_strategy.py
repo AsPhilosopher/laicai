@@ -4,27 +4,81 @@ from dataclasses import dataclass
 from typing import List, Optional, Tuple
 
 
-EXCEL_PATH = "output/股票指数数据.xlsx"
-# EXCEL_PATH = "output/黄金（Au99.99）.xlsx"
-# 默认 sheet 名设置为“黄金数据”，用于兼容黄金（Au99.99）.xlsx 等单 sheet 文件；
-# 若需要切回股票指数，可将 SHEET_NAME 改为下面注释中的值。
+# Excel 文件路径配置
+EXCEL_FILES = {
+    0: "output/股票指数数据.xlsx",
+    1: "output/黄金（Au99.99）.xlsx"
+}
 
-# SHEET_NAME = "黄金数据"
+# 股票指数 sheet 名称配置
+STOCK_SHEET_NAMES = {
+    0: "上证综合指数",
+    1: "深证成分指数",
+    2: "创业板指数",
+    3: "沪深 300 指数",
+    4: "上证 50 指数",
+    5: "中证小盘 500 指数",
+    6: "中证 1000 指数",
+    7: "上证科创板综合指数"
+}
 
-# 例如：
-# SHEET_NAME = "上证综合指数"
-# SHEET_NAME = "深证成分指数"
-SHEET_NAME = "创业板指数"
 
-# SHEET_NAME = "沪深300指数"
-# SHEET_NAME = "上证50指数"
-# SHEET_NAME = "中证小盘500指数"
-# SHEET_NAME = "中证1000指数"
-# SHEET_NAME = "上证科创板综合指数"
+def get_excel_config():
+    """
+    通过用户输入获取 Excel 文件路径和 Sheet 名称配置
+    
+    Returns:
+        tuple: (excel_path, sheet_name)
+    """
+    print("\n=== 选择 Excel 文件 ===")
+    print("0 = output/股票指数数据.xlsx")
+    print("1 = output/黄金（Au99.99）.xlsx")
+    
+    while True:
+        try:
+            file_choice = int(input("请选择 Excel 文件 (输入 0 或 1): "))
+            if file_choice not in EXCEL_FILES.keys():
+                print("无效输入，请输入 0 或 1")
+                continue
+            break
+        except ValueError:
+            print("无效输入，请输入数字 0 或 1")
+    
+    excel_path = EXCEL_FILES[file_choice]
+    
+    # 如果选择的是黄金文件，直接使用默认的 sheet 名称
+    if file_choice == 1:
+        sheet_name = "黄金数据"
+        print(f"\n已选择：{excel_path}")
+        print(f"Sheet 名称：{sheet_name}")
+    else:
+        # 如果选择的是股票指数文件，让用户选择 sheet
+        print("\n=== 选择 Sheet ===")
+        for idx, name in STOCK_SHEET_NAMES.items():
+            print(f"{idx} = {name}")
+        
+        while True:
+            try:
+                sheet_choice = int(input("请选择 Sheet (输入 0-7): "))
+                if sheet_choice not in STOCK_SHEET_NAMES.keys():
+                    print("无效输入，请输入 0-7 之间的数字")
+                    continue
+                break
+            except ValueError:
+                print("无效输入，请输入 0-7 之间的数字")
+        
+        sheet_name = STOCK_SHEET_NAMES[sheet_choice]
+        print(f"\n已选择：{excel_path}")
+        print(f"Sheet 名称：{sheet_name}")
+    
+    return excel_path, sheet_name
 
 
-DATE_COL = "日期Date"
-CLOSE_COL = "收盘Close"
+# 获取配置
+EXCEL_PATH, SHEET_NAME = get_excel_config()
+
+DATE_COL = "日期 Date"
+CLOSE_COL = "收盘 Close"
 
 
 @dataclass
@@ -609,7 +663,7 @@ def main():
     # 读取数据
     df = load_index_data()
 
-    print(f"Sheet名称: {SHEET_NAME}")
+    # print(f"Sheet名称: {SHEET_NAME}")
     # 交互输入
     today_str = datetime.now().strftime("%Y-%m-%d")
     date_str = input(f"请输入日期 (YYYY-MM-DD)，默认 {today_str}: ").strip() or today_str
