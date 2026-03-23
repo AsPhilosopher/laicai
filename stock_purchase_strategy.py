@@ -77,8 +77,8 @@ def get_excel_config():
 # 获取配置
 EXCEL_PATH, SHEET_NAME = get_excel_config()
 
-DATE_COL = "日期 Date"
-CLOSE_COL = "收盘 Close"
+DATE_COL = "日期Date"
+CLOSE_COL = "收盘Close"
 
 
 @dataclass
