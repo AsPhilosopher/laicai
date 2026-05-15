@@ -41,7 +41,13 @@ def compress_output_dir(output_dir: str = "output") -> str:
 
 
 def main(output_dir: str = "output") -> str:
-    return compress_output_dir(output_dir)
+    command_str = input(f"请选择是否执行压缩命令（1执行，其它不执行），默认 1: ").strip() or "1"
+
+    if command_str == "1":
+        return compress_output_dir(output_dir)
+    else:
+        print("不执行压缩命令")
+        return None
 
 
 if __name__ == "__main__":
