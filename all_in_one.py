@@ -10,6 +10,7 @@ import stock2excel as sex
 import stock_chart_plotting as scp
 import more_stocks_chart_plotting as mscp
 import au9999_stock_chart_plotting as auscp
+import compress_output as cout
 
 if __name__ == "__main__":
     # 获取彩票中奖号码数据
@@ -36,3 +37,5 @@ if __name__ == "__main__":
     mscp.main(n_years=25)
     # 生成黄金（9999）和上证指数涨跌幅图表
     auscp.main(n_years=10)
+    # 将 output 目录压缩并保存到 output 下
+    cout.main()
