@@ -4,71 +4,9 @@ from dataclasses import dataclass
 from typing import List, Optional, Tuple
 
 
-# Excel 文件路径配置
-EXCEL_FILES = {
-    0: "test/output/股票指数数据.xlsx",
-    1: "test/output/黄金（Au99.99）.xlsx"
-}
-
-# 股票指数 sheet 名称配置
-STOCK_SHEET_NAMES = {
-    0: "CS稀金属",
-}
-
-
-def get_excel_config():
-    """
-    通过用户输入获取 Excel 文件路径和 Sheet 名称配置
-    
-    Returns:
-        tuple: (excel_path, sheet_name)
-    """
-    print("\n=== 选择 Excel 文件 ===")
-    print("0 = test/output/股票指数数据.xlsx")
-    print("1 = test/output/黄金（Au99.99）.xlsx")
-    
-    while True:
-        try:
-            file_choice = int(input("请选择 Excel 文件 (输入 0 或 1): "))
-            if file_choice not in EXCEL_FILES.keys():
-                print("无效输入，请输入 0 或 1")
-                continue
-            break
-        except ValueError:
-            print("无效输入，请输入数字 0 或 1")
-    
-    excel_path = EXCEL_FILES[file_choice]
-    
-    # 如果选择的是黄金文件，直接使用默认的 sheet 名称
-    if file_choice == 1:
-        sheet_name = "黄金数据"
-        print(f"\n已选择：{excel_path}")
-        print(f"Sheet 名称：{sheet_name}")
-    else:
-        # 如果选择的是股票指数文件，让用户选择 sheet
-        print("\n=== 选择 Sheet ===")
-        for idx, name in STOCK_SHEET_NAMES.items():
-            print(f"{idx} = {name}")
-        
-        while True:
-            try:
-                sheet_choice = int(input("请选择 Sheet (输入 0-7): "))
-                if sheet_choice not in STOCK_SHEET_NAMES.keys():
-                    print("无效输入，请输入 0-7 之间的数字")
-                    continue
-                break
-            except ValueError:
-                print("无效输入，请输入 0-7 之间的数字")
-        
-        sheet_name = STOCK_SHEET_NAMES[sheet_choice]
-        print(f"\n已选择：{excel_path}")
-        print(f"Sheet 名称：{sheet_name}")
-    
-    return excel_path, sheet_name
-
-
-# 获取配置
-EXCEL_PATH, SHEET_NAME = get_excel_config()
+# 每次只测试 1 个基金，直接指定 Excel 与 Sheet
+EXCEL_PATH = "test/output/股票指数数据.xlsx"
+SHEET_NAME = "CS稀金属"
 
 DATE_COL = "日期Date"
 CLOSE_COL = "收盘Close"
